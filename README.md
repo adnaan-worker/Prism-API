@@ -1,15 +1,17 @@
 <div align="center">
 
-# 🌈 Prism API
+<img src="logo.svg" alt="Prism API Logo" width="120" height="120" />
 
-**通用 AI API 网关**
+# Prism API
+
+**棱镜 —— 通用 AI API 网关**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Go Version](https://img.shields.io/badge/Go-1.23-blue.svg)](https://golang.org/)
 [![React Version](https://img.shields.io/badge/React-18-blue.svg)](https://reactjs.org/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
 
-*作者：Adnaan*
+*作者：adnaan*
 
 [功能特性](#-功能特性) • [快速开始](#-快速开始) • [文档](#-文档) • [架构](#️-架构)
 

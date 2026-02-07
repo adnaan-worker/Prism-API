@@ -32,6 +32,9 @@ export default function RegisterPage() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
       <Card className="w-full max-w-md shadow-lg">
         <div className="text-center mb-8">
+          <div className="flex justify-center mb-4">
+            <img src="/logo.svg" alt="Prism API" style={{ width: 64, height: 64 }} />
+          </div>
           <Title level={2} className="!mb-2">
             注册
           </Title>

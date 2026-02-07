@@ -20,9 +20,10 @@ const LandingPage = () => {
       <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
+            <div className="flex items-center gap-3">
+              <img src="/logo.svg" alt="Prism API" style={{ width: 32, height: 32 }} />
               <Title level={4} className="!mb-0 !text-primary-600">
-                🌈 Prism API
+                Prism API
               </Title>
               <span className="ml-2 text-xs text-gray-500">by Adnaan</span>
             </div>

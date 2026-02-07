@@ -149,9 +149,18 @@ const AdminLayout: React.FC = () => {
             fontSize: collapsed ? 16 : 20,
             fontWeight: 'bold',
             borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+            gap: 12,
           }}
         >
-          {collapsed ? '🌈' : '🌈 Prism API'}
+          <img 
+            src="/logo-dark.svg" 
+            alt="Prism API" 
+            style={{
+              width: collapsed ? 28 : 36,
+              height: collapsed ? 28 : 36,
+            }}
+          />
+          {!collapsed && <span>Prism API</span>}
         </div>
 
         {/* 导航菜单 */}

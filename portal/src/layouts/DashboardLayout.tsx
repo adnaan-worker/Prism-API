@@ -114,10 +114,12 @@ const DashboardLayout = ({ isDarkMode, onThemeToggle }: DashboardLayoutProps) =>
             borderColor: isDarkMode ? token.colorBorder : 'rgba(255, 255, 255, 0.1)',
           }}
         >
-          <ApiOutlined
+          <img 
+            src={isDarkMode ? "/logo.svg" : "/logo-dark.svg"} 
+            alt="Prism API" 
             style={{
-              fontSize: collapsed ? 24 : 32,
-              color: isDarkMode ? token.colorPrimary : '#fff',
+              width: collapsed ? 32 : 40,
+              height: collapsed ? 32 : 40,
               transition: 'all 0.3s',
             }}
           />

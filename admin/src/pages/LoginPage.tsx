@@ -48,8 +48,11 @@ const LoginPage: React.FC = () => {
         }}
       >
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+            <img src="/logo.svg" alt="Prism API" style={{ width: 56, height: 56 }} />
+          </div>
           <Title level={2} style={{ marginBottom: 8 }}>
-            🌈 Prism API
+            Prism API
           </Title>
           <Text type="secondary">管理后台登录</Text>
         </div>
