@@ -129,7 +129,12 @@ prism-api/
 
 1. **克隆仓库**
 ```bash
+# GitHub
 git clone https://github.com/adnaan-worker/prism-api.git
+cd prism-api
+
+# 或者使用 Gitee（国内推荐）
+git clone https://gitee.com/adnaan/prism-api.git
 cd prism-api
 ```
 
@@ -327,8 +332,14 @@ npm test -- --coverage
 
 ## 👨‍💻 作者
 
-**adnaan**
+**Adnaan**
 - GitHub: [@adnaan-worker](https://github.com/adnaan-worker)
+- Gitee: [@adnaan](https://gitee.com/adnaan)
+
+## 🔗 仓库地址
+
+- GitHub: [https://github.com/adnaan-worker/prism-api](https://github.com/adnaan-worker/prism-api)
+- Gitee: [https://gitee.com/adnaan/prism-api](https://gitee.com/adnaan/prism-api)（国内推荐）
 
 ## 📄 许可证
 

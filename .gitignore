@@ -1,37 +1,53 @@
-# Environment variables
+# 环境变量
 .env
 .env.local
+.env.*.local
 
-# Go
-backend/server
-backend/*.exe
-backend/*.dll
-backend/*.so
-backend/*.dylib
-backend/*.test
-backend/*.out
-
-# Node
+# 依赖
 node_modules/
-portal/node_modules/
-admin/node_modules/
-portal/dist/
-admin/dist/
+vendor/
+
+# 构建输出
+dist/
+build/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# 日志
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
 
-# IDE
+# 编辑器
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-
-# OS
 .DS_Store
-Thumbs.db
 
-# Docker
-*.log
+# 测试覆盖率
+coverage/
+*.coverprofile
+
+# 临时文件
+tmp/
+temp/
+*.tmp
+
+# Go
+*.test
+*.out
+
+# 数据库
+*.db
+*.sqlite
+*.sqlite3
+
+# 备份文件
+*.bak
+*.backup
