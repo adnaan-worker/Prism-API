@@ -45,9 +45,12 @@ const Footer = () => {
         <div className="grid grid-cols-2 md:grid-cols-5 gap-8 mb-12">
           {/* Brand Column */}
           <div className="col-span-2 md:col-span-1">
-            <Title level={4} className="!text-white !mb-4">
-              🌈 Prism API
-            </Title>
+            <div className="flex items-center gap-2 mb-4">
+              <img src="/logo-dark.svg" alt="Prism API" style={{ width: 32, height: 32 }} />
+              <Title level={4} className="!text-white !mb-0">
+                Prism API
+              </Title>
+            </div>
             <Paragraph className="text-gray-400 !mb-4">
               Universal AI API Gateway
               <br />

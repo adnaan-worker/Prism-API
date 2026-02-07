@@ -132,7 +132,7 @@ const DashboardLayout = ({ isDarkMode, onThemeToggle }: DashboardLayoutProps) =>
                 color: isDarkMode ? token.colorText : '#fff',
               }}
             >
-              🌈 Prism API
+              Prism API
             </Text>
           )}
         </div>

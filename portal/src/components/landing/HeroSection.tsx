@@ -18,7 +18,7 @@ const HeroSection = () => {
           {/* Badge */}
           <div className="inline-flex items-center px-4 py-2 rounded-full bg-primary-100 text-primary-700 text-sm font-medium mb-8">
             <span className="w-2 h-2 bg-primary-500 rounded-full mr-2 animate-pulse"></span>
-            🌈 Universal AI API Gateway
+            Universal AI API Gateway
           </div>
 
           {/* Main Heading */}
