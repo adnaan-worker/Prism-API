@@ -1,0 +1,85 @@
+import { apiClient } from '../lib/api';
+
+export interface LoadBalancerConfig {
+  id: number;
+  model_name: string;
+  strategy: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ModelEndpoint {
+  config_id: number;
+  config_name: string;
+  type: string;
+  base_url: string;
+  priority: number;
+  weight: number;
+  is_active: boolean;
+  health_status: 'healthy' | 'unhealthy' | 'unknown';
+  response_time?: number;
+  success_rate?: number;
+}
+
+export interface CreateLoadBalancerConfigRequest {
+  model_name: string;
+  strategy: string;
+}
+
+export interface UpdateLoadBalancerConfigRequest {
+  strategy?: string;
+  is_active?: boolean;
+}
+
+export const loadBalancerService = {
+  // 获取负载均衡配置列表
+  getConfigs: async (): Promise<LoadBalancerConfig[]> => {
+    const response = await apiClient.get<LoadBalancerConfig[]>(
+      '/admin/load-balancer/configs'
+    );
+    return response.data;
+  },
+
+  // 获取指定模型的端点列表
+  getModelEndpoints: async (modelName: string): Promise<ModelEndpoint[]> => {
+    const response = await apiClient.get<ModelEndpoint[]>(
+      `/admin/load-balancer/models/${modelName}/endpoints`
+    );
+    return response.data;
+  },
+
+  // 创建负载均衡配置
+  createConfig: async (
+    data: CreateLoadBalancerConfigRequest
+  ): Promise<LoadBalancerConfig> => {
+    const response = await apiClient.post<LoadBalancerConfig>(
+      '/admin/load-balancer/configs',
+      data
+    );
+    return response.data;
+  },
+
+  // 更新负载均衡配置
+  updateConfig: async (
+    id: number,
+    data: UpdateLoadBalancerConfigRequest
+  ): Promise<LoadBalancerConfig> => {
+    const response = await apiClient.put<LoadBalancerConfig>(
+      `/admin/load-balancer/configs/${id}`,
+      data
+    );
+    return response.data;
+  },
+
+  // 删除负载均衡配置
+  deleteConfig: async (id: number): Promise<void> => {
+    await apiClient.delete(`/admin/load-balancer/configs/${id}`);
+  },
+
+  // 获取可用模型列表
+  getAvailableModels: async (): Promise<string[]> => {
+    const response = await apiClient.get<string[]>('/admin/models');
+    return response.data;
+  },
+};
