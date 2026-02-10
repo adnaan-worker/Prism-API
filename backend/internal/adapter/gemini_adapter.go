@@ -40,6 +40,7 @@ func (a *GeminiAdapter) GetType() string {
 type geminiRequest struct {
 	Contents         []geminiContent         `json:"contents"`
 	GenerationConfig *geminiGenerationConfig `json:"generationConfig,omitempty"`
+	Tools            []geminiToolConfig      `json:"tools,omitempty"`
 }
 
 type geminiContent struct {
@@ -48,12 +49,37 @@ type geminiContent struct {
 }
 
 type geminiPart struct {
-	Text string `json:"text"`
+	Text             string                 `json:"text,omitempty"`
+	FunctionCall     *geminiFunctionCall    `json:"functionCall,omitempty"`
+	FunctionResponse *geminiFunctionResponse `json:"functionResponse,omitempty"`
+}
+
+type geminiFunctionCall struct {
+	Name string                 `json:"name"`
+	Args map[string]interface{} `json:"args"`
+}
+
+type geminiFunctionResponse struct {
+	Name     string                 `json:"name"`
+	Response map[string]interface{} `json:"response"`
+}
+
+type geminiToolConfig struct {
+	FunctionDeclarations []geminiFunctionDeclaration `json:"functionDeclarations"`
+}
+
+type geminiFunctionDeclaration struct {
+	Name        string                 `json:"name"`
+	Description string                 `json:"description"`
+	Parameters  map[string]interface{} `json:"parameters"`
 }
 
 type geminiGenerationConfig struct {
-	Temperature     float64 `json:"temperature,omitempty"`
-	MaxOutputTokens int     `json:"maxOutputTokens,omitempty"`
+	Temperature     float64  `json:"temperature,omitempty"`
+	TopP            float64  `json:"topP,omitempty"`
+	TopK            int      `json:"topK,omitempty"`
+	MaxOutputTokens int      `json:"maxOutputTokens,omitempty"`
+	StopSequences   []string `json:"stopSequences,omitempty"`
 }
 
 type geminiResponse struct {
@@ -83,11 +109,36 @@ func (a *GeminiAdapter) Call(ctx context.Context, req *ChatRequest) (*ChatRespon
 	}
 
 	// Add generation config if specified
-	if req.Temperature > 0 || req.MaxTokens > 0 {
+	if req.Temperature > 0 || req.TopP > 0 || req.TopK > 0 || req.MaxTokens > 0 {
 		geminiReq.GenerationConfig = &geminiGenerationConfig{
 			Temperature:     req.Temperature,
+			TopP:            req.TopP,
+			TopK:            req.TopK,
 			MaxOutputTokens: req.MaxTokens,
 		}
+		
+		// Convert stop sequences
+		if req.Stop != nil {
+			switch v := req.Stop.(type) {
+			case string:
+				geminiReq.GenerationConfig.StopSequences = []string{v}
+			case []string:
+				geminiReq.GenerationConfig.StopSequences = v
+			case []interface{}:
+				stops := make([]string, len(v))
+				for i, s := range v {
+					if str, ok := s.(string); ok {
+						stops[i] = str
+					}
+				}
+				geminiReq.GenerationConfig.StopSequences = stops
+			}
+		}
+	}
+
+	// Convert tools if present
+	if len(req.Tools) > 0 {
+		geminiReq.Tools = a.convertTools(req.Tools)
 	}
 
 	// Marshal request
@@ -151,15 +202,70 @@ func (a *GeminiAdapter) convertMessages(messages []Message) []geminiContent {
 			continue
 		}
 
-		contents = append(contents, geminiContent{
-			Role: role,
-			Parts: []geminiPart{
-				{Text: msg.Content},
-			},
-		})
+		parts := []geminiPart{}
+
+		// Add text content if present
+		if msg.Content != "" {
+			parts = append(parts, geminiPart{Text: msg.Content})
+		}
+
+		// Add tool calls if present
+		if len(msg.ToolCalls) > 0 {
+			for _, tc := range msg.ToolCalls {
+				var args map[string]interface{}
+				json.Unmarshal([]byte(tc.Function.Arguments), &args)
+				
+				parts = append(parts, geminiPart{
+					FunctionCall: &geminiFunctionCall{
+						Name: tc.Function.Name,
+						Args: args,
+					},
+				})
+			}
+		}
+
+		// Add tool result if present
+		if msg.ToolCallID != "" {
+			// This is a tool result message
+			var response map[string]interface{}
+			json.Unmarshal([]byte(msg.Content), &response)
+			if response == nil {
+				response = map[string]interface{}{"result": msg.Content}
+			}
+			
+			parts = append(parts, geminiPart{
+				FunctionResponse: &geminiFunctionResponse{
+					Name:     msg.Name, // Tool name should be in Name field
+					Response: response,
+				},
+			})
+		}
+
+		if len(parts) > 0 {
+			contents = append(contents, geminiContent{
+				Role:  role,
+				Parts: parts,
+			})
+		}
 	}
 
 	return contents
+}
+
+// convertTools converts OpenAI-style tools to Gemini format
+func (a *GeminiAdapter) convertTools(tools []Tool) []geminiToolConfig {
+	declarations := make([]geminiFunctionDeclaration, len(tools))
+	for i, tool := range tools {
+		declarations[i] = geminiFunctionDeclaration{
+			Name:        tool.Function.Name,
+			Description: tool.Function.Description,
+			Parameters:  tool.Function.Parameters,
+		}
+	}
+	
+	return []geminiToolConfig{
+		{FunctionDeclarations: declarations},
+	}
 }
 
 // convertResponse converts Gemini response to unified format
@@ -167,9 +273,27 @@ func (a *GeminiAdapter) convertResponse(resp *geminiResponse, model string) *Cha
 	choices := make([]ChatChoice, len(resp.Candidates))
 
 	for i, candidate := range resp.Candidates {
-		var content string
-		if len(candidate.Content.Parts) > 0 {
-			content = candidate.Content.Parts[0].Text
+		var textContent string
+		var toolCalls []ToolCall
+		
+		// Extract text and function calls from parts
+		for _, part := range candidate.Content.Parts {
+			if part.Text != "" {
+				textContent += part.Text
+			}
+			
+			if part.FunctionCall != nil {
+				// Convert to OpenAI-style tool call
+				argsJSON, _ := json.Marshal(part.FunctionCall.Args)
+				toolCalls = append(toolCalls, ToolCall{
+					ID:   fmt.Sprintf("call_%d", time.Now().UnixNano()),
+					Type: "function",
+					Function: FunctionCall{
+						Name:      part.FunctionCall.Name,
+						Arguments: string(argsJSON),
+					},
+				})
+			}
 		}
 
 		// Convert "model" role back to "assistant"
@@ -178,12 +302,19 @@ func (a *GeminiAdapter) convertResponse(resp *geminiResponse, model string) *Cha
 			role = "assistant"
 		}
 
+		msg := Message{
+			Role:    role,
+			Content: textContent,
+		}
+		
+		if len(toolCalls) > 0 {
+			msg.ToolCalls = toolCalls
+		}
+
 		choices[i] = ChatChoice{
-			Index: candidate.Index,
-			Message: Message{
-				Role:    role,
-				Content: content,
-			},
+			Index:        candidate.Index,
+			Message:      msg,
+			FinishReason: convertGeminiFinishReason(candidate.FinishReason),
 		}
 	}
 
@@ -196,6 +327,20 @@ func (a *GeminiAdapter) convertResponse(resp *geminiResponse, model string) *Cha
 			CompletionTokens: resp.UsageMetadata.CandidatesTokenCount,
 			TotalTokens:      resp.UsageMetadata.TotalTokenCount,
 		},
+	}
+}
+
+// convertGeminiFinishReason converts Gemini finish reason to OpenAI format
+func convertGeminiFinishReason(reason string) string {
+	switch reason {
+	case "STOP":
+		return "stop"
+	case "MAX_TOKENS":
+		return "length"
+	case "SAFETY", "RECITATION":
+		return "content_filter"
+	default:
+		return "stop"
 	}
 }
 

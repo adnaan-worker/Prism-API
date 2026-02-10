@@ -22,87 +22,6 @@ func NewProxyHandler(proxyService *service.ProxyService) *ProxyHandler {
 	}
 }
 
-// OpenAI format structures (already defined in adapter package, but we need them here for API)
-type openAIRequest struct {
-	Model       string            `json:"model"`
-	Messages    []adapter.Message `json:"messages"`
-	Temperature float64           `json:"temperature,omitempty"`
-	MaxTokens   int               `json:"max_tokens,omitempty"`
-	Stream      bool              `json:"stream,omitempty"`
-}
-
-// Anthropic format structures
-type anthropicRequest struct {
-	Model       string             `json:"model"`
-	Messages    []anthropicMessage `json:"messages"`
-	MaxTokens   int                `json:"max_tokens"`
-	Temperature float64            `json:"temperature,omitempty"`
-	System      string             `json:"system,omitempty"`
-	Stream      bool               `json:"stream,omitempty"`
-}
-
-type anthropicMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
-
-type anthropicResponse struct {
-	ID         string             `json:"id"`
-	Type       string             `json:"type"`
-	Role       string             `json:"role"`
-	Content    []anthropicContent `json:"content"`
-	Model      string             `json:"model"`
-	StopReason string             `json:"stop_reason"`
-	Usage      anthropicUsage     `json:"usage"`
-}
-
-type anthropicContent struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
-}
-
-type anthropicUsage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
-}
-
-// Gemini format structures
-type geminiRequest struct {
-	Contents         []geminiContent         `json:"contents"`
-	GenerationConfig *geminiGenerationConfig `json:"generationConfig,omitempty"`
-}
-
-type geminiContent struct {
-	Role  string       `json:"role"`
-	Parts []geminiPart `json:"parts"`
-}
-
-type geminiPart struct {
-	Text string `json:"text"`
-}
-
-type geminiGenerationConfig struct {
-	Temperature     float64 `json:"temperature,omitempty"`
-	MaxOutputTokens int     `json:"maxOutputTokens,omitempty"`
-}
-
-type geminiResponse struct {
-	Candidates    []geminiCandidate `json:"candidates"`
-	UsageMetadata geminiUsage       `json:"usageMetadata"`
-}
-
-type geminiCandidate struct {
-	Content      geminiContent `json:"content"`
-	FinishReason string        `json:"finishReason"`
-	Index        int           `json:"index"`
-}
-
-type geminiUsage struct {
-	PromptTokenCount     int `json:"promptTokenCount"`
-	CandidatesTokenCount int `json:"candidatesTokenCount"`
-	TotalTokenCount      int `json:"totalTokenCount"`
-}
-
 // ChatCompletions handles OpenAI-compatible chat completions
 func (h *ProxyHandler) ChatCompletions(c *gin.Context) {
 	// Extract API key from Authorization header
@@ -131,7 +50,7 @@ func (h *ProxyHandler) ChatCompletions(c *gin.Context) {
 		return
 	}
 
-	// Parse request
+	// Parse request - bind directly to adapter.ChatRequest
 	var req adapter.ChatRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -193,6 +112,7 @@ func (h *ProxyHandler) ChatCompletions(c *gin.Context) {
 		return
 	}
 
+	// Return response directly without conversion (already in OpenAI format)
 	c.JSON(http.StatusOK, resp)
 }
 
@@ -218,8 +138,8 @@ func (h *ProxyHandler) AnthropicMessages(c *gin.Context) {
 		return
 	}
 
-	// Parse Anthropic request
-	var req anthropicRequest
+	// Parse request directly to adapter.ChatRequest
+	var req adapter.ChatRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": gin.H{
@@ -230,31 +150,21 @@ func (h *ProxyHandler) AnthropicMessages(c *gin.Context) {
 		return
 	}
 
-	// Convert Anthropic format to unified format
-	unifiedReq := &adapter.ChatRequest{
-		Model:       req.Model,
-		Messages:    h.convertAnthropicMessages(req.Messages, req.System),
-		Temperature: req.Temperature,
-		MaxTokens:   req.MaxTokens,
-		Stream:      req.Stream,
-	}
-
 	// Handle streaming vs non-streaming requests
-	if unifiedReq.Stream {
-		h.handleStreamingRequestAnthropic(c, apiKey, unifiedReq)
+	if req.Stream {
+		h.handleStreamingRequestAnthropic(c, apiKey, &req)
 		return
 	}
 
 	// Proxy the request (non-streaming)
-	resp, err := h.proxyService.ProxyRequest(c.Request.Context(), apiKey, unifiedReq)
+	resp, err := h.proxyService.ProxyRequest(c.Request.Context(), apiKey, &req)
 	if err != nil {
 		h.handleProxyError(c, err, "anthropic")
 		return
 	}
 
-	// Convert unified response to Anthropic format
-	anthropicResp := h.convertToAnthropicResponse(resp)
-	c.JSON(http.StatusOK, anthropicResp)
+	// Return response directly (adapter already handles format conversion)
+	c.JSON(http.StatusOK, resp)
 }
 
 // GeminiGenerateContent handles Gemini-compatible generateContent endpoint
@@ -307,8 +217,8 @@ func (h *ProxyHandler) GeminiGenerateContent(c *gin.Context) {
 		return
 	}
 
-	// Parse Gemini request
-	var req geminiRequest
+	// Parse request directly to adapter.ChatRequest
+	var req adapter.ChatRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": gin.H{
@@ -319,126 +229,18 @@ func (h *ProxyHandler) GeminiGenerateContent(c *gin.Context) {
 		return
 	}
 
-	// Convert Gemini format to unified format
-	unifiedReq := &adapter.ChatRequest{
-		Model:    model,
-		Messages: h.convertGeminiMessages(req.Contents),
-	}
-	if req.GenerationConfig != nil {
-		unifiedReq.Temperature = req.GenerationConfig.Temperature
-		unifiedReq.MaxTokens = req.GenerationConfig.MaxOutputTokens
-	}
+	// Set model from URL
+	req.Model = model
 
 	// Proxy the request
-	resp, err := h.proxyService.ProxyRequest(c.Request.Context(), apiKey, unifiedReq)
+	resp, err := h.proxyService.ProxyRequest(c.Request.Context(), apiKey, &req)
 	if err != nil {
 		h.handleProxyError(c, err, "gemini")
 		return
 	}
 
-	// Convert unified response to Gemini format
-	geminiResp := h.convertToGeminiResponse(resp)
-	c.JSON(http.StatusOK, geminiResp)
-}
-
-// Helper functions for message conversion
-
-func (h *ProxyHandler) convertAnthropicMessages(messages []anthropicMessage, system string) []adapter.Message {
-	var unified []adapter.Message
-
-	// Add system message first if present
-	if system != "" {
-		unified = append(unified, adapter.Message{
-			Role:    "system",
-			Content: system,
-		})
-	}
-
-	// Convert other messages
-	for _, msg := range messages {
-		unified = append(unified, adapter.Message{
-			Role:    msg.Role,
-			Content: msg.Content,
-		})
-	}
-
-	return unified
-}
-
-func (h *ProxyHandler) convertGeminiMessages(contents []geminiContent) []adapter.Message {
-	var unified []adapter.Message
-
-	for _, content := range contents {
-		role := content.Role
-		// Convert "model" role to "assistant"
-		if role == "model" {
-			role = "assistant"
-		}
-
-		// Combine all parts into single content
-		var text string
-		for _, part := range content.Parts {
-			text += part.Text
-		}
-
-		unified = append(unified, adapter.Message{
-			Role:    role,
-			Content: text,
-		})
-	}
-
-	return unified
-}
-
-func (h *ProxyHandler) convertToAnthropicResponse(resp *adapter.ChatResponse) *anthropicResponse {
-	var content string
-	if len(resp.Choices) > 0 {
-		content = resp.Choices[0].Message.Content
-	}
-
-	return &anthropicResponse{
-		ID:   resp.ID,
-		Type: "message",
-		Role: "assistant",
-		Content: []anthropicContent{
-			{
-				Type: "text",
-				Text: content,
-			},
-		},
-		Model:      resp.Model,
-		StopReason: "end_turn",
-		Usage: anthropicUsage{
-			InputTokens:  resp.Usage.PromptTokens,
-			OutputTokens: resp.Usage.CompletionTokens,
-		},
-	}
-}
-
-func (h *ProxyHandler) convertToGeminiResponse(resp *adapter.ChatResponse) *geminiResponse {
-	candidates := make([]geminiCandidate, len(resp.Choices))
-
-	for i, choice := range resp.Choices {
-		candidates[i] = geminiCandidate{
-			Content: geminiContent{
-				Role: "model",
-				Parts: []geminiPart{
-					{Text: choice.Message.Content},
-				},
-			},
-			FinishReason: "STOP",
-			Index:        choice.Index,
-		}
-	}
-
-	return &geminiResponse{
-		Candidates: candidates,
-		UsageMetadata: geminiUsage{
-			PromptTokenCount:     resp.Usage.PromptTokens,
-			CandidatesTokenCount: resp.Usage.CompletionTokens,
-			TotalTokenCount:      resp.Usage.TotalTokens,
-		},
-	}
+	// Return response directly (adapter already handles format conversion)
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *ProxyHandler) handleProxyError(c *gin.Context, err error, format string) {

@@ -57,6 +57,7 @@ func main() {
 	apiConfigRepo := repository.NewAPIConfigRepository(db)
 	signInRepo := repository.NewSignInRepository(db)
 	requestLogRepo := repository.NewRequestLogRepository(db)
+	lbRepo := repository.NewLoadBalancerRepository(db)
 
 	// Initialize services
 	authService := service.NewAuthService(userRepo, cfg.JWT.Secret)
@@ -68,6 +69,7 @@ func main() {
 	statsService := service.NewStatsService(userRepo, requestLogRepo)
 	logService := service.NewLogService(requestLogRepo)
 	proxyService := service.NewProxyService(apiKeyRepo, apiConfigRepo, userRepo, requestLogRepo, quotaService)
+	lbService := service.NewLoadBalancerService(lbRepo)
 
 	// Initialize handlers
 	authHandler := api.NewAuthHandler(authService)
@@ -80,6 +82,7 @@ func main() {
 	statsHandler := api.NewStatsHandler(statsService)
 	logHandler := api.NewLogHandler(logService)
 	proxyHandler := api.NewProxyHandler(proxyService)
+	lbHandler := api.NewLoadBalancerHandler(lbService, apiConfigService, modelService)
 
 	// Setup router
 	r := gin.Default()
@@ -182,6 +185,15 @@ func main() {
 
 		// Provider endpoints
 		adminRoutes.POST("/providers/fetch-models", providerHandler.FetchModels)
+
+		// Load balancer endpoints
+		adminRoutes.GET("/load-balancer/configs", lbHandler.GetConfigs)
+		adminRoutes.GET("/load-balancer/configs/:id", lbHandler.GetConfig)
+		adminRoutes.POST("/load-balancer/configs", lbHandler.CreateConfig)
+		adminRoutes.PUT("/load-balancer/configs/:id", lbHandler.UpdateConfig)
+		adminRoutes.DELETE("/load-balancer/configs/:id", lbHandler.DeleteConfig)
+		adminRoutes.GET("/load-balancer/models/:model/endpoints", lbHandler.GetModelEndpoints)
+		adminRoutes.GET("/models", lbHandler.GetAvailableModels)
 	}
 
 	// Start server with timeouts

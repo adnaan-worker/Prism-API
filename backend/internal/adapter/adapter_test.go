@@ -35,7 +35,7 @@ func TestOpenAIAdapter_RequestResponseConversion(t *testing.T) {
 			Choices: []openAIChoice{
 				{
 					Index: 0,
-					Message: Message{
+					Message: openAIMessage{
 						Role:    "assistant",
 						Content: "Hello! How can I help you?",
 					},

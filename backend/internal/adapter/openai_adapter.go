@@ -42,8 +42,15 @@ type openAIRequest struct {
 	Model       string    `json:"model"`
 	Messages    []Message `json:"messages"`
 	Temperature float64   `json:"temperature,omitempty"`
+	TopP        float64   `json:"top_p,omitempty"`
 	MaxTokens   int       `json:"max_tokens,omitempty"`
 	Stream      bool      `json:"stream,omitempty"`
+	Stop        interface{} `json:"stop,omitempty"` // string or []string
+	N           int       `json:"n,omitempty"`
+	PresencePenalty  float64 `json:"presence_penalty,omitempty"`
+	FrequencyPenalty float64 `json:"frequency_penalty,omitempty"`
+	Tools       []Tool    `json:"tools,omitempty"`
+	ToolChoice  interface{} `json:"tool_choice,omitempty"`
 }
 
 type openAIResponse struct {
@@ -56,9 +63,15 @@ type openAIResponse struct {
 }
 
 type openAIChoice struct {
-	Index        int     `json:"index"`
-	Message      Message `json:"message"`
-	FinishReason string  `json:"finish_reason"`
+	Index        int            `json:"index"`
+	Message      openAIMessage  `json:"message"`
+	FinishReason string         `json:"finish_reason"`
+}
+
+type openAIMessage struct {
+	Role      string     `json:"role"`
+	Content   string     `json:"content"`
+	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
 }
 
 type openAIUsage struct {
@@ -71,11 +84,18 @@ type openAIUsage struct {
 func (a *OpenAIAdapter) Call(ctx context.Context, req *ChatRequest) (*ChatResponse, error) {
 	// Convert unified request to OpenAI format
 	openAIReq := &openAIRequest{
-		Model:       req.Model,
-		Messages:    req.Messages,
-		Temperature: req.Temperature,
-		MaxTokens:   req.MaxTokens,
-		Stream:      req.Stream,
+		Model:            req.Model,
+		Messages:         req.Messages,
+		Temperature:      req.Temperature,
+		TopP:             req.TopP,
+		MaxTokens:        req.MaxTokens,
+		Stream:           req.Stream,
+		Stop:             req.Stop,
+		N:                req.N,
+		PresencePenalty:  req.PresencePenalty,
+		FrequencyPenalty: req.FrequencyPenalty,
+		Tools:            req.Tools,
+		ToolChoice:       req.ToolChoice,
 	}
 
 	// Marshal request
@@ -137,14 +157,27 @@ func (a *OpenAIAdapter) Call(ctx context.Context, req *ChatRequest) (*ChatRespon
 func (a *OpenAIAdapter) convertResponse(resp *openAIResponse) *ChatResponse {
 	choices := make([]ChatChoice, len(resp.Choices))
 	for i, choice := range resp.Choices {
+		msg := Message{
+			Role:    choice.Message.Role,
+			Content: choice.Message.Content,
+		}
+		
+		// Convert tool calls if present
+		if len(choice.Message.ToolCalls) > 0 {
+			msg.ToolCalls = choice.Message.ToolCalls
+		}
+		
 		choices[i] = ChatChoice{
-			Index:   choice.Index,
-			Message: choice.Message,
+			Index:        choice.Index,
+			Message:      msg,
+			FinishReason: choice.FinishReason,
 		}
 	}
 
 	return &ChatResponse{
 		ID:      resp.ID,
+		Object:  resp.Object,  // Preserve OpenAI's "chat.completion"
+		Created: resp.Created, // Preserve Unix timestamp
 		Model:   resp.Model,
 		Choices: choices,
 		Usage: UsageInfo{

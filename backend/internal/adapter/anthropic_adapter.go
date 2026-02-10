@@ -42,27 +42,40 @@ type anthropicRequest struct {
 	Messages    []anthropicMessage `json:"messages"`
 	MaxTokens   int                `json:"max_tokens"`
 	Temperature float64            `json:"temperature,omitempty"`
+	TopP        float64            `json:"top_p,omitempty"`
+	TopK        int                `json:"top_k,omitempty"`
 	System      string             `json:"system,omitempty"`
+	Tools       []anthropicTool    `json:"tools,omitempty"`
+	Stream      bool               `json:"stream,omitempty"`
 }
 
 type anthropicMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role    string      `json:"role"`
+	Content interface{} `json:"content"` // string or []anthropicContent
+}
+
+type anthropicTool struct {
+	Name        string                 `json:"name"`
+	Description string                 `json:"description,omitempty"`
+	InputSchema map[string]interface{} `json:"input_schema"`
 }
 
 type anthropicResponse struct {
-	ID         string             `json:"id"`
-	Type       string             `json:"type"`
-	Role       string             `json:"role"`
-	Content    []anthropicContent `json:"content"`
-	Model      string             `json:"model"`
-	StopReason string             `json:"stop_reason"`
-	Usage      anthropicUsage     `json:"usage"`
+	ID         string              `json:"id"`
+	Type       string              `json:"type"`
+	Role       string              `json:"role"`
+	Content    []anthropicContent  `json:"content"`
+	Model      string              `json:"model"`
+	StopReason string              `json:"stop_reason"`
+	Usage      anthropicUsage      `json:"usage"`
 }
 
 type anthropicContent struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
+	Type  string                 `json:"type"` // text, tool_use, tool_result
+	Text  string                 `json:"text,omitempty"`
+	ID    string                 `json:"id,omitempty"`
+	Name  string                 `json:"name,omitempty"`
+	Input map[string]interface{} `json:"input,omitempty"`
 }
 
 type anthropicUsage struct {
@@ -85,7 +98,14 @@ func (a *AnthropicAdapter) Call(ctx context.Context, req *ChatRequest) (*ChatRes
 		Messages:    messages,
 		MaxTokens:   maxTokens,
 		Temperature: req.Temperature,
+		TopP:        req.TopP,
+		TopK:        req.TopK,
 		System:      system,
+	}
+
+	// Convert tools if present
+	if len(req.Tools) > 0 {
+		anthropicReq.Tools = a.convertTools(req.Tools)
 	}
 
 	// Marshal request
@@ -144,23 +164,106 @@ func (a *AnthropicAdapter) convertMessages(messages []Message) ([]anthropicMessa
 		if msg.Role == "system" {
 			// Anthropic uses a separate system field
 			system = msg.Content
-		} else {
+		} else if msg.Role == "tool" {
+			// Tool result message
 			anthropicMessages = append(anthropicMessages, anthropicMessage{
-				Role:    msg.Role,
-				Content: msg.Content,
+				Role: "user",
+				Content: []anthropicContent{
+					{
+						Type: "tool_result",
+						ID:   msg.ToolCallID,
+						Text: msg.Content,
+					},
+				},
 			})
+		} else {
+			// Check if message has tool calls
+			if len(msg.ToolCalls) > 0 {
+				// Convert tool calls to Anthropic format
+				contents := make([]anthropicContent, 0, len(msg.ToolCalls)+1)
+				
+				// Add text content if present
+				if msg.Content != "" {
+					contents = append(contents, anthropicContent{
+						Type: "text",
+						Text: msg.Content,
+					})
+				}
+				
+				// Add tool use contents
+				for _, tc := range msg.ToolCalls {
+					var input map[string]interface{}
+					json.Unmarshal([]byte(tc.Function.Arguments), &input)
+					
+					contents = append(contents, anthropicContent{
+						Type:  "tool_use",
+						ID:    tc.ID,
+						Name:  tc.Function.Name,
+						Input: input,
+					})
+				}
+				
+				anthropicMessages = append(anthropicMessages, anthropicMessage{
+					Role:    msg.Role,
+					Content: contents,
+				})
+			} else {
+				// Regular text message
+				anthropicMessages = append(anthropicMessages, anthropicMessage{
+					Role:    msg.Role,
+					Content: msg.Content,
+				})
+			}
 		}
 	}
 
 	return anthropicMessages, system
 }
 
+// convertTools converts OpenAI-style tools to Anthropic format
+func (a *AnthropicAdapter) convertTools(tools []Tool) []anthropicTool {
+	anthropicTools := make([]anthropicTool, len(tools))
+	for i, tool := range tools {
+		anthropicTools[i] = anthropicTool{
+			Name:        tool.Function.Name,
+			Description: tool.Function.Description,
+			InputSchema: tool.Function.Parameters,
+		}
+	}
+	return anthropicTools
+}
+
 // convertResponse converts Anthropic response to unified format
 func (a *AnthropicAdapter) convertResponse(resp *anthropicResponse) *ChatResponse {
-	// Extract text from content array
-	var content string
-	if len(resp.Content) > 0 {
-		content = resp.Content[0].Text
+	// Extract text and tool calls from content array
+	var textContent string
+	var toolCalls []ToolCall
+	
+	for _, content := range resp.Content {
+		switch content.Type {
+		case "text":
+			textContent += content.Text
+		case "tool_use":
+			// Convert to OpenAI-style tool call
+			argsJSON, _ := json.Marshal(content.Input)
+			toolCalls = append(toolCalls, ToolCall{
+				ID:   content.ID,
+				Type: "function",
+				Function: FunctionCall{
+					Name:      content.Name,
+					Arguments: string(argsJSON),
+				},
+			})
+		}
+	}
+
+	msg := Message{
+		Role:    resp.Role,
+		Content: textContent,
+	}
+	
+	if len(toolCalls) > 0 {
+		msg.ToolCalls = toolCalls
 	}
 
 	return &ChatResponse{
@@ -168,11 +271,9 @@ func (a *AnthropicAdapter) convertResponse(resp *anthropicResponse) *ChatRespons
 		Model: resp.Model,
 		Choices: []ChatChoice{
 			{
-				Index: 0,
-				Message: Message{
-					Role:    resp.Role,
-					Content: content,
-				},
+				Index:        0,
+				Message:      msg,
+				FinishReason: resp.StopReason,
 			},
 		},
 		Usage: UsageInfo{

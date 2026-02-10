@@ -7,22 +7,61 @@ import (
 
 // Message represents a chat message
 type Message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role       string     `json:"role"`
+	Content    string     `json:"content"`
+	Name       string     `json:"name,omitempty"`
+	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string     `json:"tool_call_id,omitempty"`
+}
+
+// ToolCall represents a tool/function call
+type ToolCall struct {
+	ID       string       `json:"id"`
+	Type     string       `json:"type"` // function
+	Function FunctionCall `json:"function"`
+}
+
+// FunctionCall represents a function call
+type FunctionCall struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"` // JSON string
+}
+
+// Tool represents a tool definition
+type Tool struct {
+	Type     string       `json:"type"` // function
+	Function ToolFunction `json:"function"`
+}
+
+// ToolFunction represents a function definition
+type ToolFunction struct {
+	Name        string                 `json:"name"`
+	Description string                 `json:"description,omitempty"`
+	Parameters  map[string]interface{} `json:"parameters"`
 }
 
 // ChatRequest represents a unified chat completion request
 type ChatRequest struct {
-	Model       string    `json:"model"`
-	Messages    []Message `json:"messages"`
-	Temperature float64   `json:"temperature,omitempty"`
-	MaxTokens   int       `json:"max_tokens,omitempty"`
-	Stream      bool      `json:"stream,omitempty"`
+	Model            string      `json:"model"`
+	Messages         []Message   `json:"messages"`
+	Temperature      float64     `json:"temperature,omitempty"`
+	TopP             float64     `json:"top_p,omitempty"`
+	TopK             int         `json:"top_k,omitempty"`
+	MaxTokens        int         `json:"max_tokens,omitempty"`
+	Stream           bool        `json:"stream,omitempty"`
+	Stop             interface{} `json:"stop,omitempty"` // string or []string
+	N                int         `json:"n,omitempty"`
+	PresencePenalty  float64     `json:"presence_penalty,omitempty"`
+	FrequencyPenalty float64     `json:"frequency_penalty,omitempty"`
+	Tools            []Tool      `json:"tools,omitempty"`
+	ToolChoice       interface{} `json:"tool_choice,omitempty"`
 }
 
 // ChatResponse represents a unified chat completion response
 type ChatResponse struct {
 	ID      string       `json:"id"`
+	Object  string       `json:"object,omitempty"`  // OpenAI: "chat.completion"
+	Created int64        `json:"created,omitempty"` // OpenAI: Unix timestamp
 	Model   string       `json:"model"`
 	Choices []ChatChoice `json:"choices"`
 	Usage   UsageInfo    `json:"usage"`
@@ -30,8 +69,9 @@ type ChatResponse struct {
 
 // ChatChoice represents a single choice in the response
 type ChatChoice struct {
-	Index   int     `json:"index"`
-	Message Message `json:"message"`
+	Index        int     `json:"index"`
+	Message      Message `json:"message"`
+	FinishReason string  `json:"finish_reason,omitempty"` // stop, length, content_filter, tool_calls
 }
 
 // UsageInfo represents token usage information
