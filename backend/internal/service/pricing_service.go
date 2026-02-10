@@ -94,25 +94,6 @@ func (s *PricingService) DeletePricing(ctx context.Context, id uint) error {
 	return s.pricingRepo.Delete(ctx, id)
 }
 
-// CalculateCost calculates the cost for given token usage
-func (s *PricingService) CalculateCost(ctx context.Context, modelName string, apiConfigID uint, inputTokens, outputTokens int) (float64, error) {
-	pricing, err := s.pricingRepo.FindByModelAndAPIConfig(ctx, modelName, apiConfigID)
-	if err != nil {
-		return 0, err
-	}
-	
-	// If no pricing found, use default (free)
-	if pricing == nil {
-		return 0, nil
-	}
-
-	// Calculate cost based on pricing unit (usually per 1000 tokens)
-	inputCost := (float64(inputTokens) / float64(pricing.Unit)) * pricing.InputPrice
-	outputCost := (float64(outputTokens) / float64(pricing.Unit)) * pricing.OutputPrice
-	
-	return inputCost + outputCost, nil
-}
-
 // GetPricingsByAPIConfig retrieves all pricings for an API config
 func (s *PricingService) GetPricingsByAPIConfig(ctx context.Context, apiConfigID uint) ([]*models.Pricing, error) {
 	return s.pricingRepo.FindByAPIConfig(ctx, apiConfigID)

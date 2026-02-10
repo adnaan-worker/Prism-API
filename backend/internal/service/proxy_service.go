@@ -21,16 +21,16 @@ var (
 
 // ProxyService handles API proxy requests
 type ProxyService struct {
-	apiKeyRepo     *repository.APIKeyRepository
-	configRepo     *repository.APIConfigRepository
-	userRepo       *repository.UserRepository
-	requestLogRepo *repository.RequestLogRepository
-	lbRepo         *repository.LoadBalancerRepository
-	billingTxRepo  *repository.BillingTransactionRepository
-	quotaService   *QuotaService
-	billingService *BillingService
-	lbFactory      *loadbalancer.Factory
-	adapterFactory *adapter.Factory
+	apiKeyRepo      *repository.APIKeyRepository
+	configRepo      *repository.APIConfigRepository
+	userRepo        *repository.UserRepository
+	requestLogRepo  *repository.RequestLogRepository
+	lbRepo          *repository.LoadBalancerRepository
+	quotaService    *QuotaService
+	billingService  *BillingService
+	tokenEstimator  *TokenEstimator
+	lbFactory       *loadbalancer.Factory
+	adapterFactory  *adapter.Factory
 }
 
 // NewProxyService creates a new proxy service
@@ -71,6 +71,7 @@ func NewProxyServiceWithLB(
 		lbRepo:         lbRepo,
 		quotaService:   quotaService,
 		billingService: billingService,
+		tokenEstimator: NewTokenEstimator(),
 		lbFactory:      loadbalancer.NewFactory(),
 		adapterFactory: adapter.NewFactory(),
 	}
@@ -103,8 +104,8 @@ func (s *ProxyService) ProxyRequest(ctx context.Context, apiKey string, req *ada
 		return nil, fmt.Errorf("user not found")
 	}
 
-	// Estimate tokens for pre-check (more accurate estimation)
-	estimatedTokens := s.estimateTokens(req)
+	// Estimate tokens for pre-check
+	estimatedTokens := s.tokenEstimator.EstimateTotal(req)
 	
 	hasQuota, err := s.quotaService.CheckQuota(ctx, user.ID, estimatedTokens)
 	if err != nil {
