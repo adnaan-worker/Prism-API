@@ -29,6 +29,8 @@ type ProxyService struct {
 	quotaService    *QuotaService
 	billingService  *BillingService
 	tokenEstimator  *TokenEstimator
+	cacheService    *CacheService
+	cacheConfig     *CacheConfig
 	lbFactory       *loadbalancer.Factory
 	adapterFactory  *adapter.Factory
 }
@@ -62,6 +64,8 @@ func NewProxyServiceWithLB(
 	lbRepo *repository.LoadBalancerRepository,
 	quotaService *QuotaService,
 	billingService *BillingService,
+	cacheService *CacheService,
+	cacheConfig *CacheConfig,
 ) *ProxyService {
 	return &ProxyService{
 		apiKeyRepo:     apiKeyRepo,
@@ -72,6 +76,8 @@ func NewProxyServiceWithLB(
 		quotaService:   quotaService,
 		billingService: billingService,
 		tokenEstimator: NewTokenEstimator(),
+		cacheService:   cacheService,
+		cacheConfig:    cacheConfig,
 		lbFactory:      loadbalancer.NewFactory(),
 		adapterFactory: adapter.NewFactory(),
 	}
@@ -114,6 +120,26 @@ func (s *ProxyService) ProxyRequest(ctx context.Context, apiKey string, req *ada
 	if !hasQuota {
 		s.logRequest(ctx, keyRecord.UserID, keyRecord.ID, 0, req.Model, "POST", "/v1/chat/completions", 429, 0, 0, "Insufficient quota")
 		return nil, ErrInsufficientQuota
+	}
+
+	// 2.5. Check cache (if enabled)
+	// Get cache config from application config (passed during service initialization)
+	cacheConfig := s.cacheConfig
+	
+	if s.cacheService != nil && cacheConfig.Enabled {
+		cachedResp, isCached, err := s.cacheService.GetCachedResponse(ctx, req, cacheConfig)
+		if err == nil && isCached {
+			// Cache hit! Return cached response without calling API
+			responseTime := int(time.Since(startTime).Milliseconds())
+			
+			// Log cache hit (status code 200, but with 0 tokens since it's cached)
+			s.logRequest(ctx, keyRecord.UserID, keyRecord.ID, 0, req.Model, "POST", "/v1/chat/completions", 200, responseTime, 0, "Cache hit")
+			
+			// Mark response as cached
+			cachedResp.Cached = true
+			
+			return cachedResp, nil
+		}
 	}
 
 	// 3. Find configurations for the model
@@ -190,6 +216,16 @@ func (s *ProxyService) ProxyRequest(ctx context.Context, apiKey string, req *ada
 
 	// 7. Log successful request
 	s.logRequest(ctx, keyRecord.UserID, keyRecord.ID, selectedConfig.ID, req.Model, "POST", "/v1/chat/completions", 200, responseTime, resp.Usage.TotalTokens, "")
+
+	// 8. Save to cache (if enabled)
+	if s.cacheService != nil && cacheConfig.Enabled {
+		// Save response to cache asynchronously
+		go func() {
+			if err := s.cacheService.SaveCachedResponse(context.Background(), req, resp, cacheConfig, keyRecord.UserID); err != nil {
+				fmt.Printf("Warning: failed to save cache: %v\n", err)
+			}
+		}()
+	}
 
 	return resp, nil
 }

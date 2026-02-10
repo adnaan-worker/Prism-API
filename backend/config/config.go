@@ -9,10 +9,12 @@ import (
 
 // Config holds all application configuration
 type Config struct {
-	Database DatabaseConfig
-	Redis    RedisConfig
-	Server   ServerConfig
-	JWT      JWTConfig
+	Database  DatabaseConfig
+	Redis     RedisConfig
+	Server    ServerConfig
+	JWT       JWTConfig
+	Embedding EmbeddingConfig
+	Cache     CacheConfig
 }
 
 // DatabaseConfig holds database configuration
@@ -43,6 +45,21 @@ type JWTConfig struct {
 	Secret string
 }
 
+// EmbeddingConfig holds embedding service configuration
+type EmbeddingConfig struct {
+	URL     string
+	Timeout time.Duration
+	Enabled bool
+}
+
+// CacheConfig holds cache configuration
+type CacheConfig struct {
+	Enabled       bool
+	TTL           time.Duration
+	SemanticMatch bool
+	Threshold     float64
+}
+
 // Load loads configuration from environment variables
 func Load() (*Config, error) {
 	cfg := &Config{
@@ -65,6 +82,17 @@ func Load() (*Config, error) {
 		},
 		JWT: JWTConfig{
 			Secret: getEnv("JWT_SECRET", "your-secret-key-change-in-production"),
+		},
+		Embedding: EmbeddingConfig{
+			URL:     getEnv("EMBEDDING_URL", "http://localhost:8765"),
+			Timeout: getEnvAsDuration("EMBEDDING_TIMEOUT", 30*time.Second),
+			Enabled: getEnvAsBool("EMBEDDING_ENABLED", true),
+		},
+		Cache: CacheConfig{
+			Enabled:       getEnvAsBool("CACHE_ENABLED", true),
+			TTL:           getEnvAsDuration("CACHE_TTL", 24*time.Hour),
+			SemanticMatch: getEnvAsBool("CACHE_SEMANTIC_MATCH", true),
+			Threshold:     getEnvAsFloat("CACHE_THRESHOLD", 0.85),
 		},
 	}
 
@@ -99,6 +127,26 @@ func getEnvAsDuration(key string, defaultValue time.Duration) time.Duration {
 	if value := os.Getenv(key); value != "" {
 		if duration, err := time.ParseDuration(value); err == nil {
 			return duration
+		}
+	}
+	return defaultValue
+}
+
+// getEnvAsBool gets an environment variable as bool or returns a default value
+func getEnvAsBool(key string, defaultValue bool) bool {
+	if value := os.Getenv(key); value != "" {
+		if boolValue, err := strconv.ParseBool(value); err == nil {
+			return boolValue
+		}
+	}
+	return defaultValue
+}
+
+// getEnvAsFloat gets an environment variable as float64 or returns a default value
+func getEnvAsFloat(key string, defaultValue float64) float64 {
+	if value := os.Getenv(key); value != "" {
+		if floatValue, err := strconv.ParseFloat(value, 64); err == nil {
+			return floatValue
 		}
 	}
 	return defaultValue

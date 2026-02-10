@@ -65,6 +65,7 @@ type ChatResponse struct {
 	Model   string       `json:"model"`
 	Choices []ChatChoice `json:"choices"`
 	Usage   UsageInfo    `json:"usage"`
+	Cached  bool         `json:"cached,omitempty"` // 标记是否来自缓存
 }
 
 // ChatChoice represents a single choice in the response

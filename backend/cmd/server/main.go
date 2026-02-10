@@ -72,7 +72,25 @@ func main() {
 	logService := service.NewLogService(requestLogRepo)
 	pricingService := service.NewPricingService(pricingRepo)
 	billingService := service.NewBillingService(userRepo, pricingService)
-	proxyService := service.NewProxyServiceWithLB(apiKeyRepo, apiConfigRepo, userRepo, requestLogRepo, lbRepo, quotaService, billingService)
+	
+	// Initialize embedding service (if enabled)
+	var embeddingService service.EmbeddingService
+	if cfg.Embedding.Enabled {
+		embeddingService = service.NewEmbeddingHTTPService(cfg.Embedding.URL, cfg.Embedding.Timeout)
+	}
+	
+	// Initialize cache service
+	cacheService := service.NewCacheService(db, embeddingService)
+	
+	// Create cache config from application config
+	cacheConfig := &service.CacheConfig{
+		Enabled:       cfg.Cache.Enabled,
+		TTL:           cfg.Cache.TTL,
+		SemanticMatch: cfg.Cache.SemanticMatch,
+		Threshold:     cfg.Cache.Threshold,
+	}
+	
+	proxyService := service.NewProxyServiceWithLB(apiKeyRepo, apiConfigRepo, userRepo, requestLogRepo, lbRepo, quotaService, billingService, cacheService, cacheConfig)
 	lbService := service.NewLoadBalancerService(lbRepo)
 
 	// Initialize handlers
@@ -88,6 +106,7 @@ func main() {
 	proxyHandler := api.NewProxyHandler(proxyService)
 	lbHandler := api.NewLoadBalancerHandler(lbService, apiConfigService, modelService)
 	pricingHandler := api.NewPricingHandler(pricingService)
+	cacheHandler := api.NewCacheHandler(cacheService)
 
 	// Setup router
 	r := gin.Default()
@@ -138,6 +157,7 @@ func main() {
 		userRoutes.GET("/info", quotaHandler.GetQuotaInfo)
 		userRoutes.POST("/signin", quotaHandler.SignIn)
 		userRoutes.GET("/usage-history", quotaHandler.GetUsageHistory)
+		userRoutes.GET("/cache/stats", cacheHandler.GetCacheStats)
 	}
 
 	// API Key routes (authentication required)
@@ -207,6 +227,10 @@ func main() {
 		adminRoutes.PUT("/pricings/:id", pricingHandler.UpdatePricing)
 		adminRoutes.DELETE("/pricings/:id", pricingHandler.DeletePricing)
 		adminRoutes.GET("/pricings/by-config", pricingHandler.GetPricingsByAPIConfig)
+
+		// Cache management endpoints
+		adminRoutes.POST("/cache/clean-expired", cacheHandler.CleanExpiredCache)
+		adminRoutes.DELETE("/cache/users/:id", cacheHandler.ClearUserCache)
 	}
 
 	// Start server with timeouts

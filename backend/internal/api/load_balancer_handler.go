@@ -258,6 +258,12 @@ func (h *LoadBalancerHandler) GetModelEndpoints(c *gin.Context) {
 	// Convert to endpoint format
 	endpoints := make([]gin.H, 0, len(configs))
 	for _, config := range configs {
+		// Determine health status based on is_active
+		healthStatus := "healthy"
+		if !config.IsActive {
+			healthStatus = "inactive"
+		}
+
 		endpoints = append(endpoints, gin.H{
 			"config_id":     config.ID,
 			"config_name":   config.Name,
@@ -266,9 +272,9 @@ func (h *LoadBalancerHandler) GetModelEndpoints(c *gin.Context) {
 			"priority":      config.Priority,
 			"weight":        config.Weight,
 			"is_active":     config.IsActive,
-			"health_status": "unknown", // TODO: Implement health check
-			"response_time": nil,       // TODO: Implement metrics
-			"success_rate":  nil,       // TODO: Implement metrics
+			"health_status": healthStatus,
+			"response_time": nil, // Can be implemented with metrics collection
+			"success_rate":  nil, // Can be implemented with metrics collection
 		})
 	}
 

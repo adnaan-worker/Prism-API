@@ -191,3 +191,28 @@ COMMENT ON TABLE request_logs IS 'API request logs for analytics and monitoring'
 COMMENT ON TABLE sign_in_records IS 'Daily sign-in records for quota rewards';
 COMMENT ON TABLE pricings IS 'Pricing configurations for models by provider';
 COMMENT ON TABLE billing_transactions IS 'Billing transaction audit trail for all quota operations';
+
+-- Request Cache table (for semantic caching with vector embeddings)
+CREATE TABLE IF NOT EXISTS request_caches (
+    id SERIAL PRIMARY KEY,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    cache_key VARCHAR(32) NOT NULL UNIQUE,
+    query_text TEXT,
+    embedding TEXT,
+    model VARCHAR(100) NOT NULL,
+    request TEXT NOT NULL,
+    response TEXT NOT NULL,
+    tokens_saved INTEGER NOT NULL DEFAULT 0,
+    hit_count INTEGER NOT NULL DEFAULT 0,
+    expires_at TIMESTAMP NOT NULL
+);
+
+-- Indexes for request_caches table
+CREATE INDEX IF NOT EXISTS idx_request_caches_cache_key ON request_caches(cache_key);
+CREATE INDEX IF NOT EXISTS idx_request_caches_user_id ON request_caches(user_id);
+CREATE INDEX IF NOT EXISTS idx_request_caches_model ON request_caches(model);
+CREATE INDEX IF NOT EXISTS idx_request_caches_expires_at ON request_caches(expires_at);
+CREATE INDEX IF NOT EXISTS idx_request_caches_user_model ON request_caches(user_id, model) WHERE expires_at > NOW();
+CREATE INDEX IF NOT EXISTS idx_request_caches_embedding ON request_caches(model) WHERE embedding IS NOT NULL AND expires_at > NOW();

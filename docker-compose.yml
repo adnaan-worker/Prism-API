@@ -29,6 +29,25 @@ services:
       timeout: 5s
       retries: 5
 
+  embedding:
+    build:
+      context: ./embedding-service
+      dockerfile: Dockerfile
+    container_name: prism-api-embedding
+    ports:
+      - "8765:8765"
+    environment:
+      MODEL_NAME: all-MiniLM-L6-v2
+      HOST: 0.0.0.0
+      PORT: 8765
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8765/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
   backend:
     build:
       context: ./backend
@@ -41,11 +60,34 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      embedding:
+        condition: service_healthy
     environment:
+      # Database
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/prism_api?sslmode=disable
+      DB_MAX_OPEN_CONNS: 25
+      DB_MAX_IDLE_CONNS: 5
+      DB_CONN_MAX_LIFETIME: 5m
+      # Redis
       REDIS_URL: redis://redis:6379
+      REDIS_POOL_SIZE: 10
+      REDIS_MIN_IDLE_CONN: 2
+      # JWT
       JWT_SECRET: your-secret-key-change-in-production
+      # Server
       PORT: 8080
+      SERVER_READ_TIMEOUT: 10s
+      SERVER_WRITE_TIMEOUT: 10s
+      REQUEST_TIMEOUT: 30s
+      # Embedding Service
+      EMBEDDING_URL: http://embedding:8765
+      EMBEDDING_TIMEOUT: 30s
+      EMBEDDING_ENABLED: "true"
+      # Cache
+      CACHE_ENABLED: "true"
+      CACHE_TTL: 24h
+      CACHE_SEMANTIC_MATCH: "true"
+      CACHE_THRESHOLD: "0.85"
     restart: unless-stopped
 
   portal:
