@@ -1,10 +1,9 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Card,
   Table,
   Button,
   Space,
-  Tag,
   Modal,
   Form,
   Input,
@@ -15,29 +14,28 @@ import {
   Switch,
 } from 'antd';
 import {
-  PlusOutlined,
   EditOutlined,
   DeleteOutlined,
-  ReloadOutlined,
   ApiOutlined,
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiConfigService } from '../services/apiConfigService';
 import type { APIConfig } from '../types';
 import type { ColumnsType } from 'antd/es/table';
+import TableToolbar from '../components/TableToolbar';
+import ProviderTag from '../components/ProviderTag';
+import { useTable } from '../hooks/useTable';
+import { useModal } from '../hooks/useModal';
+import { formatDateTime } from '../utils/format';
 
 const { Option } = Select;
 const { TextArea } = Input;
 
 const ApiConfigsPage: React.FC = () => {
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [typeFilter, setTypeFilter] = useState<string | undefined>();
-  const [modalVisible, setModalVisible] = useState(false);
-  const [editingConfig, setEditingConfig] = useState<APIConfig | null>(null);
-  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
-  const [fetchingModels, setFetchingModels] = useState(false);
-  const [form] = Form.useForm();
+  const { page, pageSize, selectedRowKeys, handlePageChange, handleSelectionChange, clearSelection, resetPagination } = useTable();
+  const [typeFilter, setTypeFilter] = React.useState<string | undefined>();
+  const configModal = useModal<APIConfig>();
+  const [fetchingModels, setFetchingModels] = React.useState(false);
 
   const queryClient = useQueryClient();
 
@@ -58,7 +56,7 @@ const ApiConfigsPage: React.FC = () => {
     onSuccess: () => {
       message.success('API配置创建成功');
       queryClient.invalidateQueries({ queryKey: ['api-configs'] });
-      handleModalClose();
+      configModal.hideModal();
     },
     onError: () => {
       message.error('API配置创建失败');
@@ -72,7 +70,7 @@ const ApiConfigsPage: React.FC = () => {
     onSuccess: () => {
       message.success('API配置更新成功');
       queryClient.invalidateQueries({ queryKey: ['api-configs'] });
-      handleModalClose();
+      configModal.hideModal();
     },
     onError: () => {
       message.error('API配置更新失败');
@@ -110,7 +108,7 @@ const ApiConfigsPage: React.FC = () => {
     onSuccess: () => {
       message.success('批量删除成功');
       queryClient.invalidateQueries({ queryKey: ['api-configs'] });
-      setSelectedRowKeys([]);
+      clearSelection();
     },
     onError: () => {
       message.error('批量删除失败');
@@ -140,15 +138,7 @@ const ApiConfigsPage: React.FC = () => {
       title: '类型',
       dataIndex: 'type',
       key: 'type',
-      render: (type: string) => {
-        const colorMap: Record<string, string> = {
-          openai: 'blue',
-          anthropic: 'orange',
-          gemini: 'green',
-          custom: 'purple',
-        };
-        return <Tag color={colorMap[type] || 'default'}>{type.toUpperCase()}</Tag>;
-      },
+      render: (type: string) => <ProviderTag provider={type} />,
       filters: [
         { text: 'OpenAI', value: 'openai' },
         { text: 'Anthropic', value: 'anthropic' },
@@ -209,7 +199,7 @@ const ApiConfigsPage: React.FC = () => {
       title: '创建时间',
       dataIndex: 'created_at',
       key: 'created_at',
-      render: (date: string) => new Date(date).toLocaleString('zh-CN'),
+      render: (date: string) => formatDateTime(date),
     },
     {
       title: '操作',
@@ -243,39 +233,29 @@ const ApiConfigsPage: React.FC = () => {
 
   // 打开添加模态框
   const handleAdd = () => {
-    setEditingConfig(null);
-    form.resetFields();
-    form.setFieldsValue({
+    configModal.showModal();
+    configModal.form.setFieldsValue({
       priority: 100,
       weight: 1,
       max_rps: 0,
       timeout: 30,
     });
-    setModalVisible(true);
   };
 
   // 打开编辑模态框
   const handleEdit = (config: APIConfig) => {
-    setEditingConfig(config);
-    form.setFieldsValue({
+    configModal.showModal(config);
+    configModal.form.setFieldsValue({
       ...config,
       models: config.models.join('\n'),
     });
-    setModalVisible(true);
-  };
-
-  // 关闭模态框
-  const handleModalClose = () => {
-    setModalVisible(false);
-    setEditingConfig(null);
-    form.resetFields();
   };
 
   // 获取模型列表
   const handleFetchModels = async () => {
-    const type = form.getFieldValue('type');
-    const baseUrl = form.getFieldValue('base_url');
-    const apiKey = form.getFieldValue('api_key');
+    const type = configModal.form.getFieldValue('type');
+    const baseUrl = configModal.form.getFieldValue('base_url');
+    const apiKey = configModal.form.getFieldValue('api_key');
 
     if (!type) {
       message.warning('请先选择API类型');
@@ -299,7 +279,7 @@ const ApiConfigsPage: React.FC = () => {
       });
       
       if (response.models && response.models.length > 0) {
-        form.setFieldsValue({
+        configModal.form.setFieldsValue({
           models: response.models.join('\n'),
         });
         message.success(`成功获取 ${response.models.length} 个模型`);
@@ -315,7 +295,7 @@ const ApiConfigsPage: React.FC = () => {
 
   // 提交表单
   const handleSubmit = () => {
-    form.validateFields().then((values) => {
+    configModal.form.validateFields().then((values) => {
       const modelsArray =
         typeof values.models === 'string'
           ? values.models.split('\n').filter((m: string) => m.trim())
@@ -326,8 +306,8 @@ const ApiConfigsPage: React.FC = () => {
         models: modelsArray,
       };
 
-      if (editingConfig) {
-        updateMutation.mutate({ id: editingConfig.id, data });
+      if (configModal.editingItem) {
+        updateMutation.mutate({ id: configModal.editingItem.id, data });
       } else {
         createMutation.mutate(data);
       }
@@ -352,44 +332,44 @@ const ApiConfigsPage: React.FC = () => {
   // 行选择配置
   const rowSelection = {
     selectedRowKeys,
-    onChange: (keys: React.Key[]) => setSelectedRowKeys(keys),
+    onChange: handleSelectionChange,
   };
 
   return (
     <div>
       <Card>
         {/* 操作栏 */}
-        <Space style={{ marginBottom: 16 }} wrap>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={handleAdd}
-          >
-            添加配置
-          </Button>
-          <Button
-            danger
-            icon={<DeleteOutlined />}
-            onClick={handleBatchDelete}
-            disabled={selectedRowKeys.length === 0}
-          >
-            批量删除 ({selectedRowKeys.length})
-          </Button>
-          <Select
-            placeholder="筛选类型"
-            allowClear
-            style={{ width: 150 }}
-            onChange={setTypeFilter}
-          >
-            <Option value="openai">OpenAI</Option>
-            <Option value="anthropic">Anthropic</Option>
-            <Option value="gemini">Gemini</Option>
-            <Option value="custom">Custom</Option>
-          </Select>
-          <Button icon={<ReloadOutlined />} onClick={() => refetch()}>
-            刷新
-          </Button>
-        </Space>
+        <TableToolbar
+          onAdd={handleAdd}
+          addText="添加配置"
+          onRefresh={() => refetch()}
+          extra={
+            <>
+              <Button
+                danger
+                icon={<DeleteOutlined />}
+                onClick={handleBatchDelete}
+                disabled={selectedRowKeys.length === 0}
+              >
+                批量删除 ({selectedRowKeys.length})
+              </Button>
+              <Select
+                placeholder="筛选类型"
+                allowClear
+                style={{ width: 150 }}
+                onChange={(value) => {
+                  setTypeFilter(value);
+                  resetPagination();
+                }}
+              >
+                <Option value="openai">OpenAI</Option>
+                <Option value="anthropic">Anthropic</Option>
+                <Option value="gemini">Gemini</Option>
+                <Option value="custom">Custom</Option>
+              </Select>
+            </>
+          }
+        />
 
         {/* 配置列表表格 */}
         <Table
@@ -406,24 +386,21 @@ const ApiConfigsPage: React.FC = () => {
             showSizeChanger: true,
             showQuickJumper: true,
             showTotal: (total) => `共 ${total} 条记录`,
-            onChange: (newPage, newPageSize) => {
-              setPage(newPage);
-              setPageSize(newPageSize);
-            },
+            onChange: handlePageChange,
           }}
         />
       </Card>
 
       {/* 添加/编辑模态框 */}
       <Modal
-        title={editingConfig ? '编辑API配置' : '添加API配置'}
-        open={modalVisible}
+        title={configModal.isEditing ? '编辑API配置' : '添加API配置'}
+        open={configModal.visible}
         onOk={handleSubmit}
-        onCancel={handleModalClose}
+        onCancel={configModal.hideModal}
         confirmLoading={createMutation.isPending || updateMutation.isPending}
         width={700}
       >
-        <Form form={form} layout="vertical">
+        <Form form={configModal.form} layout="vertical">
           <Form.Item
             label="配置名称"
             name="name"

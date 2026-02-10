@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Card,
   Table,
@@ -16,8 +16,6 @@ import {
   Popconfirm,
 } from 'antd';
 import {
-  SearchOutlined,
-  ReloadOutlined,
   UserOutlined,
   EditOutlined,
   StopOutlined,
@@ -27,19 +25,22 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { userService } from '../services/userService';
 import type { User } from '../types';
 import type { ColumnsType } from 'antd/es/table';
+import TableToolbar from '../components/TableToolbar';
+import StatusTag from '../components/StatusTag';
+import { useTable } from '../hooks/useTable';
+import { useModal } from '../hooks/useModal';
+import { formatNumber, formatDateTime, formatPercent } from '../utils/format';
 
 const { Search } = Input;
 const { Option } = Select;
 
 const UsersPage: React.FC = () => {
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string | undefined>();
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [drawerVisible, setDrawerVisible] = useState(false);
-  const [quotaModalVisible, setQuotaModalVisible] = useState(false);
-  const [quotaForm] = Form.useForm();
+  const { page, pageSize, handlePageChange, resetPagination } = useTable();
+  const [search, setSearch] = React.useState('');
+  const [statusFilter, setStatusFilter] = React.useState<string | undefined>();
+  const [selectedUser, setSelectedUser] = React.useState<User | null>(null);
+  const [drawerVisible, setDrawerVisible] = React.useState(false);
+  const quotaModal = useModal<User>();
 
   const queryClient = useQueryClient();
 
@@ -76,9 +77,8 @@ const UsersPage: React.FC = () => {
     onSuccess: () => {
       message.success('用户额度更新成功');
       queryClient.invalidateQueries({ queryKey: ['users'] });
-      setQuotaModalVisible(false);
+      quotaModal.hideModal();
       setDrawerVisible(false);
-      quotaForm.resetFields();
     },
     onError: () => {
       message.error('用户额度更新失败');
@@ -113,11 +113,7 @@ const UsersPage: React.FC = () => {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      render: (status: string) => {
-        const color = status === 'active' ? 'green' : 'red';
-        const text = status === 'active' ? '正常' : '禁用';
-        return <Tag color={color}>{text}</Tag>;
-      },
+      render: (status: string) => <StatusTag status={status} />,
       filters: [
         { text: '正常', value: 'active' },
         { text: '禁用', value: 'disabled' },
@@ -128,18 +124,18 @@ const UsersPage: React.FC = () => {
       title: '总额度',
       dataIndex: 'quota',
       key: 'quota',
-      render: (quota: number) => quota.toLocaleString(),
+      render: (quota: number) => formatNumber(quota),
     },
     {
       title: '已使用',
       dataIndex: 'used_quota',
       key: 'used_quota',
-      render: (used: number) => used.toLocaleString(),
+      render: (used: number) => formatNumber(used),
     },
     {
       title: '剩余额度',
       key: 'remaining',
-      render: (_, record) => (record.quota - record.used_quota).toLocaleString(),
+      render: (_, record) => formatNumber(record.quota - record.used_quota),
     },
     {
       title: '管理员',
@@ -152,7 +148,7 @@ const UsersPage: React.FC = () => {
       title: '注册时间',
       dataIndex: 'created_at',
       key: 'created_at',
-      render: (date: string) => new Date(date).toLocaleString('zh-CN'),
+      render: (date: string) => formatDateTime(date),
     },
     {
       title: '操作',
@@ -225,14 +221,14 @@ const UsersPage: React.FC = () => {
   // 调整额度
   const handleAdjustQuota = () => {
     if (!selectedUser) return;
-    quotaForm.setFieldsValue({ quota: selectedUser.quota });
-    setQuotaModalVisible(true);
+    quotaModal.showModal(selectedUser);
+    quotaModal.form.setFieldsValue({ quota: selectedUser.quota });
   };
 
   // 提交额度调整
   const handleQuotaSubmit = () => {
     if (!selectedUser) return;
-    quotaForm.validateFields().then((values) => {
+    quotaModal.form.validateFields().then((values) => {
       updateQuotaMutation.mutate({
         id: selectedUser.id,
         quota: values.quota,
@@ -243,13 +239,13 @@ const UsersPage: React.FC = () => {
   // 搜索
   const handleSearch = (value: string) => {
     setSearch(value);
-    setPage(1);
+    resetPagination();
   };
 
   // 状态筛选
   const handleStatusFilter = (value: string | undefined) => {
     setStatusFilter(value);
-    setPage(1);
+    resetPagination();
   };
 
   return (
@@ -260,7 +256,6 @@ const UsersPage: React.FC = () => {
           <Search
             placeholder="搜索用户名或邮箱"
             allowClear
-            enterButton={<SearchOutlined />}
             style={{ width: 300 }}
             onSearch={handleSearch}
           />
@@ -273,9 +268,7 @@ const UsersPage: React.FC = () => {
             <Option value="active">正常</Option>
             <Option value="disabled">禁用</Option>
           </Select>
-          <Button icon={<ReloadOutlined />} onClick={() => refetch()}>
-            刷新
-          </Button>
+          <TableToolbar showAdd={false} onRefresh={() => refetch()} />
         </Space>
 
         {/* 用户列表表格 */}
@@ -292,10 +285,7 @@ const UsersPage: React.FC = () => {
             showSizeChanger: true,
             showQuickJumper: true,
             showTotal: (total) => `共 ${total} 条记录`,
-            onChange: (newPage, newPageSize) => {
-              setPage(newPage);
-              setPageSize(newPageSize);
-            },
+            onChange: handlePageChange,
           }}
         />
       </Card>
@@ -340,9 +330,7 @@ const UsersPage: React.FC = () => {
               {selectedUser.email}
             </Descriptions.Item>
             <Descriptions.Item label="状态">
-              <Tag color={selectedUser.status === 'active' ? 'green' : 'red'}>
-                {selectedUser.status === 'active' ? '正常' : '禁用'}
-              </Tag>
+              <StatusTag status={selectedUser.status} />
             </Descriptions.Item>
             <Descriptions.Item label="管理员">
               {selectedUser.is_admin ? (
@@ -352,27 +340,23 @@ const UsersPage: React.FC = () => {
               )}
             </Descriptions.Item>
             <Descriptions.Item label="总额度">
-              {selectedUser.quota.toLocaleString()} tokens
+              {formatNumber(selectedUser.quota)} tokens
             </Descriptions.Item>
             <Descriptions.Item label="已使用额度">
-              {selectedUser.used_quota.toLocaleString()} tokens
+              {formatNumber(selectedUser.used_quota)} tokens
             </Descriptions.Item>
             <Descriptions.Item label="剩余额度">
-              {(selectedUser.quota - selectedUser.used_quota).toLocaleString()}{' '}
-              tokens
+              {formatNumber(selectedUser.quota - selectedUser.used_quota)} tokens
             </Descriptions.Item>
             <Descriptions.Item label="使用率">
-              {((selectedUser.used_quota / selectedUser.quota) * 100).toFixed(
-                2
-              )}
-              %
+              {formatPercent(selectedUser.used_quota, selectedUser.quota)}
             </Descriptions.Item>
             <Descriptions.Item label="注册时间">
-              {new Date(selectedUser.created_at).toLocaleString('zh-CN')}
+              {formatDateTime(selectedUser.created_at)}
             </Descriptions.Item>
             {selectedUser.last_sign_in && (
               <Descriptions.Item label="最后登录">
-                {new Date(selectedUser.last_sign_in).toLocaleString('zh-CN')}
+                {formatDateTime(selectedUser.last_sign_in)}
               </Descriptions.Item>
             )}
           </Descriptions>
@@ -382,15 +366,12 @@ const UsersPage: React.FC = () => {
       {/* 调整额度模态框 */}
       <Modal
         title="调整用户额度"
-        open={quotaModalVisible}
+        open={quotaModal.visible}
         onOk={handleQuotaSubmit}
-        onCancel={() => {
-          setQuotaModalVisible(false);
-          quotaForm.resetFields();
-        }}
+        onCancel={quotaModal.hideModal}
         confirmLoading={updateQuotaMutation.isPending}
       >
-        <Form form={quotaForm} layout="vertical">
+        <Form form={quotaModal.form} layout="vertical">
           <Form.Item
             label="新的总额度"
             name="quota"
@@ -412,15 +393,9 @@ const UsersPage: React.FC = () => {
           </Form.Item>
           {selectedUser && (
             <div style={{ color: '#666', fontSize: 12 }}>
-              <p>当前总额度: {selectedUser.quota.toLocaleString()} tokens</p>
-              <p>
-                已使用额度: {selectedUser.used_quota.toLocaleString()} tokens
-              </p>
-              <p>
-                剩余额度:{' '}
-                {(selectedUser.quota - selectedUser.used_quota).toLocaleString()}{' '}
-                tokens
-              </p>
+              <p>当前总额度: {formatNumber(selectedUser.quota)} tokens</p>
+              <p>已使用额度: {formatNumber(selectedUser.used_quota)} tokens</p>
+              <p>剩余额度: {formatNumber(selectedUser.quota - selectedUser.used_quota)} tokens</p>
             </div>
           )}
         </Form>

@@ -2,8 +2,8 @@ package api
 
 import (
 	"api-aggregator/backend/internal/service"
+	"api-aggregator/backend/pkg/response"
 	"errors"
-	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -23,39 +23,21 @@ func NewUserHandler(userService *service.UserService) *UserHandler {
 func (h *UserHandler) GetUsers(c *gin.Context) {
 	var req service.GetUsersRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": gin.H{
-				"code":    400001,
-				"message": "Invalid request",
-				"details": err.Error(),
-			},
-		})
+		response.BadRequest(c, "Invalid request", err.Error())
 		return
 	}
 
 	resp, err := h.userService.GetUsers(c.Request.Context(), &req)
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidPage) {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": gin.H{
-					"code":    400001,
-					"message": "Invalid page parameters",
-					"details": err.Error(),
-				},
-			})
+			response.BadRequest(c, "Invalid page parameters", err.Error())
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": gin.H{
-				"code":    500001,
-				"message": "Internal server error",
-				"details": err.Error(),
-			},
-		})
+		response.InternalError(c, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, resp)
+	response.Success(c, resp)
 }
 
 // GetUserByID handles getting a user by ID (admin only)
@@ -63,41 +45,21 @@ func (h *UserHandler) GetUserByID(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": gin.H{
-				"code":    400001,
-				"message": "Invalid user ID",
-				"details": "User ID must be a valid number",
-			},
-		})
+		response.BadRequest(c, "Invalid user ID", "User ID must be a valid number")
 		return
 	}
 
 	user, err := h.userService.GetUserByID(c.Request.Context(), uint(id))
 	if err != nil {
 		if errors.Is(err, service.ErrUserNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{
-				"error": gin.H{
-					"code":    404001,
-					"message": "User not found",
-					"details": "The requested user does not exist",
-				},
-			})
+			response.NotFound(c, "User not found")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": gin.H{
-				"code":    500001,
-				"message": "Internal server error",
-				"details": err.Error(),
-			},
-		})
+		response.InternalError(c, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"user": user,
-	})
+	response.Success(c, gin.H{"user": user})
 }
 
 // UpdateUserStatus handles updating a user's status (admin only)
@@ -105,52 +67,26 @@ func (h *UserHandler) UpdateUserStatus(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": gin.H{
-				"code":    400001,
-				"message": "Invalid user ID",
-				"details": "User ID must be a valid number",
-			},
-		})
+		response.BadRequest(c, "Invalid user ID", "User ID must be a valid number")
 		return
 	}
 
 	var req service.UpdateUserStatusRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": gin.H{
-				"code":    400001,
-				"message": "Invalid request",
-				"details": err.Error(),
-			},
-		})
+		response.BadRequest(c, "Invalid request", err.Error())
 		return
 	}
 
 	if err := h.userService.UpdateUserStatus(c.Request.Context(), uint(id), req.Status); err != nil {
 		if errors.Is(err, service.ErrUserNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{
-				"error": gin.H{
-					"code":    404001,
-					"message": "User not found",
-					"details": "The requested user does not exist",
-				},
-			})
+			response.NotFound(c, "User not found")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": gin.H{
-				"code":    500001,
-				"message": "Internal server error",
-				"details": err.Error(),
-			},
-		})
+		response.InternalError(c, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "User status updated successfully",
-	})
+	response.SuccessWithMessage(c, "User status updated successfully", nil)
 }
 
 // UpdateUserQuota handles updating a user's quota (admin only)
@@ -158,50 +94,24 @@ func (h *UserHandler) UpdateUserQuota(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": gin.H{
-				"code":    400001,
-				"message": "Invalid user ID",
-				"details": "User ID must be a valid number",
-			},
-		})
+		response.BadRequest(c, "Invalid user ID", "User ID must be a valid number")
 		return
 	}
 
 	var req service.UpdateUserQuotaRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": gin.H{
-				"code":    400001,
-				"message": "Invalid request",
-				"details": err.Error(),
-			},
-		})
+		response.BadRequest(c, "Invalid request", err.Error())
 		return
 	}
 
 	if err := h.userService.UpdateUserQuota(c.Request.Context(), uint(id), req.Quota); err != nil {
 		if errors.Is(err, service.ErrUserNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{
-				"error": gin.H{
-					"code":    404001,
-					"message": "User not found",
-					"details": "The requested user does not exist",
-				},
-			})
+			response.NotFound(c, "User not found")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": gin.H{
-				"code":    500001,
-				"message": "Internal server error",
-				"details": err.Error(),
-			},
-		})
+		response.InternalError(c, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "User quota updated successfully",
-	})
+	response.SuccessWithMessage(c, "User quota updated successfully", nil)
 }
