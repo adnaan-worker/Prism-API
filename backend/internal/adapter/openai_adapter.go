@@ -192,11 +192,18 @@ func (a *OpenAIAdapter) convertResponse(resp *openAIResponse) *ChatResponse {
 func (a *OpenAIAdapter) CallStream(ctx context.Context, req *ChatRequest) (*http.Response, error) {
 	// Convert unified request to OpenAI format with stream enabled
 	openAIReq := &openAIRequest{
-		Model:       req.Model,
-		Messages:    req.Messages,
-		Temperature: req.Temperature,
-		MaxTokens:   req.MaxTokens,
-		Stream:      true,
+		Model:            req.Model,
+		Messages:         req.Messages,
+		Temperature:      req.Temperature,
+		TopP:             req.TopP,
+		MaxTokens:        req.MaxTokens,
+		Stream:           true,
+		Stop:             req.Stop,
+		N:                req.N,
+		PresencePenalty:  req.PresencePenalty,
+		FrequencyPenalty: req.FrequencyPenalty,
+		Tools:            req.Tools,
+		ToolChoice:       req.ToolChoice,
 	}
 
 	// Marshal request

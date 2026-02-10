@@ -56,6 +56,7 @@ func cleanupModelTestDB(t *testing.T, db *gorm.DB) {
 // Property 9: 模型列表完整性
 // Feature: api-aggregator, Property 9: For any set of active API configurations, the model list should contain all models from all configurations.
 // Validates: Requirements 4.1
+// Note: After refactoring, each config's models are listed separately (no deduplication)
 func TestProperty_ModelListCompleteness(t *testing.T) {
 	db := setupModelTestDB(t)
 	defer cleanupModelTestDB(t, db)
@@ -118,28 +119,46 @@ func TestProperty_ModelListCompleteness(t *testing.T) {
 				return false
 			}
 
-			// Create a set of all expected models
-			expectedModels := make(map[string]bool)
+			// Create a map of expected models with their config IDs
+			expectedModels := make(map[string]map[uint]bool)
 			for _, m := range models1 {
-				expectedModels[m] = true
+				if expectedModels[m] == nil {
+					expectedModels[m] = make(map[uint]bool)
+				}
+				expectedModels[m][config1.ID] = true
 			}
 			for _, m := range models2 {
-				expectedModels[m] = true
+				if expectedModels[m] == nil {
+					expectedModels[m] = make(map[uint]bool)
+				}
+				expectedModels[m][config2.ID] = true
 			}
 			for _, m := range models3 {
-				expectedModels[m] = true
+				if expectedModels[m] == nil {
+					expectedModels[m] = make(map[uint]bool)
+				}
+				expectedModels[m][config3.ID] = true
 			}
 
-			// Create a set of returned models
-			returnedModels := make(map[string]bool)
+			// Create a map of returned models with their config IDs
+			returnedModels := make(map[string]map[uint]bool)
 			for _, modelInfo := range allModels {
-				returnedModels[modelInfo.Name] = true
+				if returnedModels[modelInfo.Name] == nil {
+					returnedModels[modelInfo.Name] = make(map[uint]bool)
+				}
+				returnedModels[modelInfo.Name][modelInfo.ConfigID] = true
 			}
 
-			// Verify all expected models are in the returned list
-			for expectedModel := range expectedModels {
-				if !returnedModels[expectedModel] {
+			// Verify all expected model-config pairs are in the returned list
+			for modelName, configIDs := range expectedModels {
+				returnedConfigs, exists := returnedModels[modelName]
+				if !exists {
 					return false
+				}
+				for configID := range configIDs {
+					if !returnedConfigs[configID] {
+						return false
+					}
 				}
 			}
 
@@ -154,8 +173,9 @@ func TestProperty_ModelListCompleteness(t *testing.T) {
 }
 
 // Property 10: 模型去重
-// Feature: api-aggregator, Property 10: For any model name that appears in multiple API configurations, the model list should contain that model name exactly once.
+// Feature: api-aggregator, Property 10: For any model name that appears in multiple API configurations, GetUniqueModels should return each model name exactly once.
 // Validates: Requirements 4.2
+// Note: After refactoring, GetAllModels lists each config's models separately, but GetUniqueModels deduplicates them
 func TestProperty_ModelDeduplication(t *testing.T) {
 	db := setupModelTestDB(t)
 	defer cleanupModelTestDB(t, db)
@@ -212,26 +232,24 @@ func TestProperty_ModelDeduplication(t *testing.T) {
 				return true // Skip on error
 			}
 
-			// Get all models
+			// Get all models (should list each config's models separately)
 			allModels, err := modelService.GetAllModels(ctx)
 			if err != nil {
 				return false
 			}
 
-			// Count occurrences of the shared model
+			// Count occurrences of the shared model in GetAllModels
+			// After refactoring, each config's model is listed separately
+			// So we should see the shared model 3 times (once per config)
 			count := 0
 			for _, modelInfo := range allModels {
 				if modelInfo.Name == sharedModel {
 					count++
-					// Verify config count is correct (should be 3)
-					if modelInfo.ConfigCount != 3 {
-						return false
-					}
 				}
 			}
 
-			// Shared model should appear exactly once
-			return count == 1
+			// Shared model should appear 3 times (once per config)
+			return count == 3
 		},
 		modelGen,
 	))
@@ -287,11 +305,8 @@ func TestModelService_GetAllModels(t *testing.T) {
 	modelNames := make(map[string]bool)
 	for _, model := range allModels {
 		modelNames[model.Name] = true
-		if model.Status != "active" {
-			t.Errorf("Expected status 'active', got %s", model.Status)
-		}
-		if model.ConfigCount != 1 {
-			t.Errorf("Expected config count 1, got %d", model.ConfigCount)
+		if !model.IsActive {
+			t.Errorf("Expected IsActive true, got false")
 		}
 	}
 
@@ -343,7 +358,7 @@ func TestModelService_GetUniqueModels(t *testing.T) {
 		t.Fatalf("Expected no error, got %v", err)
 	}
 
-	// Should have 3 unique models
+	// Should have 3 unique models (gpt-4, gpt-3.5-turbo, claude-3)
 	if len(uniqueModels) != 3 {
 		t.Errorf("Expected 3 unique models, got %d", len(uniqueModels))
 	}
@@ -358,8 +373,8 @@ func TestModelService_GetUniqueModels(t *testing.T) {
 	}
 }
 
-// Unit test for provider inference
-func TestModelService_InferProvider(t *testing.T) {
+// Unit test for provider normalization
+func TestModelService_NormalizeProvider(t *testing.T) {
 	db := setupModelTestDB(t)
 	defer cleanupModelTestDB(t, db)
 
@@ -367,24 +382,19 @@ func TestModelService_InferProvider(t *testing.T) {
 	modelService := NewModelService(configRepo)
 
 	tests := []struct {
-		modelName        string
 		configType       string
 		expectedProvider string
 	}{
-		{"gpt-4", "openai", "OpenAI"},
-		{"gpt-3.5-turbo", "openai", "OpenAI"},
-		{"claude-3-opus", "anthropic", "Anthropic"},
-		{"claude-3-sonnet", "anthropic", "Anthropic"},
-		{"gemini-pro", "gemini", "Google"},
-		{"gemini-1.5-pro", "gemini", "Google"},
-		{"llama-2-70b", "custom", "Meta"},
-		{"mistral-7b", "custom", "Mistral"},
-		{"unknown-model", "custom", "Custom"},
+		{"openai", "OpenAI"},
+		{"anthropic", "Anthropic"},
+		{"gemini", "Google"},
+		{"custom", "Custom"},
+		{"unknown", "Custom"},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.modelName, func(t *testing.T) {
-			provider := modelService.inferProvider(tt.modelName, tt.configType)
+		t.Run(tt.configType, func(t *testing.T) {
+			provider := modelService.normalizeProvider(tt.configType)
 			if provider != tt.expectedProvider {
 				t.Errorf("Expected provider %s, got %s", tt.expectedProvider, provider)
 			}

@@ -299,7 +299,15 @@ func (a *AnthropicAdapter) CallStream(ctx context.Context, req *ChatRequest) (*h
 		Messages:    messages,
 		MaxTokens:   maxTokens,
 		Temperature: req.Temperature,
+		TopP:        req.TopP,
+		TopK:        req.TopK,
 		System:      system,
+		Stream:      true,
+	}
+
+	// Convert tools if present
+	if len(req.Tools) > 0 {
+		anthropicReq.Tools = a.convertTools(req.Tools)
 	}
 
 	// Marshal request

@@ -19,6 +19,29 @@ func NewModelHandler(modelService *service.ModelService) *ModelHandler {
 
 // GetAllModels handles getting all available models
 func (h *ModelHandler) GetAllModels(c *gin.Context) {
+	// Check if grouped query is requested
+	grouped := c.Query("grouped") == "true"
+	
+	if grouped {
+		groups, err := h.modelService.GetModelsGroupedByProvider(c.Request.Context())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": gin.H{
+					"code":    500001,
+					"message": "Internal server error",
+					"details": err.Error(),
+				},
+			})
+			return
+		}
+		
+		c.JSON(http.StatusOK, gin.H{
+			"groups": groups,
+			"total":  len(groups),
+		})
+		return
+	}
+	
 	models, err := h.modelService.GetAllModels(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -72,7 +95,7 @@ func (h *ModelHandler) GetModelsByProvider(c *gin.Context) {
 
 // GetModelInfo handles getting information about a specific model
 func (h *ModelHandler) GetModelInfo(c *gin.Context) {
-	modelName := c.Param("model")
+	modelName := c.Param("name")
 	if modelName == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": gin.H{
@@ -84,7 +107,7 @@ func (h *ModelHandler) GetModelInfo(c *gin.Context) {
 		return
 	}
 
-	modelInfo, err := h.modelService.GetModelInfo(c.Request.Context(), modelName)
+	modelInfos, err := h.modelService.GetModelInfo(c.Request.Context(), modelName)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": gin.H{
@@ -97,6 +120,7 @@ func (h *ModelHandler) GetModelInfo(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"model": modelInfo,
+		"models": modelInfos,
+		"total":  len(modelInfos),
 	})
 }

@@ -18,14 +18,28 @@ const (
 )
 
 type QuotaService struct {
-	userRepo   *repository.UserRepository
-	signInRepo *repository.SignInRepository
+	userRepo       *repository.UserRepository
+	signInRepo     *repository.SignInRepository
+	requestLogRepo *repository.RequestLogRepository
 }
 
 func NewQuotaService(userRepo *repository.UserRepository, signInRepo *repository.SignInRepository) *QuotaService {
 	return &QuotaService{
-		userRepo:   userRepo,
-		signInRepo: signInRepo,
+		userRepo:       userRepo,
+		signInRepo:     signInRepo,
+		requestLogRepo: nil, // Will be set if needed
+	}
+}
+
+func NewQuotaServiceWithLogs(
+	userRepo *repository.UserRepository,
+	signInRepo *repository.SignInRepository,
+	requestLogRepo *repository.RequestLogRepository,
+) *QuotaService {
+	return &QuotaService{
+		userRepo:       userRepo,
+		signInRepo:     signInRepo,
+		requestLogRepo: requestLogRepo,
 	}
 }
 
@@ -146,18 +160,40 @@ type UsageHistoryItem struct {
 
 // GetUsageHistory returns usage history for the past N days
 func (s *QuotaService) GetUsageHistory(ctx context.Context, userID uint, days int) ([]UsageHistoryItem, error) {
-	// TODO: Implement actual usage history from request_logs
-	// For now, return mock data
+	// If requestLogRepo is not set, return empty history
+	if s.requestLogRepo == nil {
+		history := make([]UsageHistoryItem, days)
+		now := time.Now()
+		for i := 0; i < days; i++ {
+			date := now.AddDate(0, 0, -days+i+1)
+			history[i] = UsageHistoryItem{
+				Date:   date.Format("2006-01-02"),
+				Tokens: 0,
+			}
+		}
+		return history, nil
+	}
+	
+	// Calculate date range
+	endDate := time.Now()
+	startDate := endDate.AddDate(0, 0, -days+1)
+	
+	// Get usage statistics from request logs
+	usageMap, err := s.requestLogRepo.GetDailyUsage(ctx, userID, startDate, endDate)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query usage history: %w", err)
+	}
+	
+	// Fill in all days (including days with 0 usage)
 	history := make([]UsageHistoryItem, days)
-	now := time.Now()
-
 	for i := 0; i < days; i++ {
-		date := now.AddDate(0, 0, -days+i+1)
+		date := startDate.AddDate(0, 0, i)
+		dateStr := date.Format("2006-01-02")
 		history[i] = UsageHistoryItem{
-			Date:   date.Format("2006-01-02"),
-			Tokens: 0, // Would be calculated from request_logs
+			Date:   dateStr,
+			Tokens: int64(usageMap[dateStr]),
 		}
 	}
-
+	
 	return history, nil
 }

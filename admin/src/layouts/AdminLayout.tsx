@@ -10,6 +10,7 @@ import {
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  DollarOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import type { MenuProps } from 'antd';
@@ -43,6 +44,11 @@ const AdminLayout: React.FC = () => {
       key: '/load-balancer',
       icon: <BarChartOutlined />,
       label: '负载均衡',
+    },
+    {
+      key: '/pricing',
+      icon: <DollarOutlined />,
+      label: '定价管理',
     },
     {
       key: '/logs',
@@ -96,6 +102,7 @@ const AdminLayout: React.FC = () => {
     '/users': '用户管理',
     '/api-configs': 'API配置',
     '/load-balancer': '负载均衡',
+    '/pricing': '定价管理',
     '/logs': '请求日志',
     '/settings': '系统设置',
   };

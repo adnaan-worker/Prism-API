@@ -354,11 +354,36 @@ func (a *GeminiAdapter) CallStream(ctx context.Context, req *ChatRequest) (*http
 	}
 
 	// Add generation config if specified
-	if req.Temperature > 0 || req.MaxTokens > 0 {
+	if req.Temperature > 0 || req.TopP > 0 || req.TopK > 0 || req.MaxTokens > 0 {
 		geminiReq.GenerationConfig = &geminiGenerationConfig{
 			Temperature:     req.Temperature,
+			TopP:            req.TopP,
+			TopK:            req.TopK,
 			MaxOutputTokens: req.MaxTokens,
 		}
+		
+		// Convert stop sequences
+		if req.Stop != nil {
+			switch v := req.Stop.(type) {
+			case string:
+				geminiReq.GenerationConfig.StopSequences = []string{v}
+			case []string:
+				geminiReq.GenerationConfig.StopSequences = v
+			case []interface{}:
+				stops := make([]string, len(v))
+				for i, s := range v {
+					if str, ok := s.(string); ok {
+						stops[i] = str
+					}
+				}
+				geminiReq.GenerationConfig.StopSequences = stops
+			}
+		}
+	}
+
+	// Convert tools if present
+	if len(req.Tools) > 0 {
+		geminiReq.Tools = a.convertTools(req.Tools)
 	}
 
 	// Marshal request

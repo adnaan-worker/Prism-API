@@ -126,3 +126,34 @@ func (r *RequestLogRepository) FindWithFilters(ctx context.Context, filter *LogF
 
 	return logs, total, nil
 }
+
+// GetDailyUsage returns daily token usage for a user within a date range
+func (r *RequestLogRepository) GetDailyUsage(ctx context.Context, userID uint, startDate, endDate time.Time) (map[string]int, error) {
+	var results []struct {
+		Date   string
+		Tokens int
+	}
+	
+	err := r.db.WithContext(ctx).
+		Table("request_logs").
+		Select("DATE(created_at) as date, SUM(tokens_used) as tokens").
+		Where("user_id = ? AND created_at >= ? AND created_at < ?", 
+			userID, 
+			startDate.Format("2006-01-02"), 
+			endDate.AddDate(0, 0, 1).Format("2006-01-02")).
+		Group("DATE(created_at)").
+		Order("date ASC").
+		Scan(&results).Error
+	
+	if err != nil {
+		return nil, err
+	}
+	
+	// Convert to map
+	usageMap := make(map[string]int)
+	for _, r := range results {
+		usageMap[r.Date] = r.Tokens
+	}
+	
+	return usageMap, nil
+}

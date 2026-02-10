@@ -12,9 +12,18 @@ type ModelInfo struct {
 	Name        string `json:"name"`
 	Provider    string `json:"provider"`
 	Type        string `json:"type"`
-	Status      string `json:"status"`
+	ConfigID    uint   `json:"config_id"`
+	ConfigName  string `json:"config_name"`
+	BaseURL     string `json:"base_url"`
+	IsActive    bool   `json:"is_active"`
 	Description string `json:"description"`
-	ConfigCount int    `json:"config_count"`
+}
+
+// ModelGroup represents models grouped by provider
+type ModelGroup struct {
+	Provider string       `json:"provider"`
+	Models   []*ModelInfo `json:"models"`
+	Count    int          `json:"count"`
 }
 
 // ModelService handles model-related operations
@@ -30,6 +39,7 @@ func NewModelService(configRepo *repository.APIConfigRepository) *ModelService {
 }
 
 // GetAllModels returns all available models from active API configurations
+// Each configuration's models are listed separately (no deduplication)
 func (s *ModelService) GetAllModels(ctx context.Context) ([]*ModelInfo, error) {
 	// Get all active configurations
 	configs, err := s.configRepo.FindActive(ctx)
@@ -37,39 +47,23 @@ func (s *ModelService) GetAllModels(ctx context.Context) ([]*ModelInfo, error) {
 		return nil, fmt.Errorf("failed to get active configs: %w", err)
 	}
 
-	// Extract models and deduplicate
-	modelMap := make(map[string]*ModelInfo)
-	modelConfigCount := make(map[string]int)
+	models := make([]*ModelInfo, 0)
 
 	for _, config := range configs {
+		provider := s.normalizeProvider(config.Type)
+		
 		for _, modelName := range config.Models {
-			// Count configurations per model
-			modelConfigCount[modelName]++
-
-			// If model already exists, just update count
-			if _, exists := modelMap[modelName]; exists {
-				continue
-			}
-
-			// Infer provider from model name or config type
-			provider := s.inferProvider(modelName, config.Type)
-
-			// Create model info
-			modelMap[modelName] = &ModelInfo{
+			models = append(models, &ModelInfo{
 				Name:        modelName,
 				Provider:    provider,
 				Type:        "chat",
-				Status:      "active",
-				Description: fmt.Sprintf("%s model", provider),
-			}
+				ConfigID:    config.ID,
+				ConfigName:  config.Name,
+				BaseURL:     config.BaseURL,
+				IsActive:    config.IsActive,
+				Description: fmt.Sprintf("%s - %s", provider, config.Name),
+			})
 		}
-	}
-
-	// Convert map to slice and add config counts
-	models := make([]*ModelInfo, 0, len(modelMap))
-	for modelName, modelInfo := range modelMap {
-		modelInfo.ConfigCount = modelConfigCount[modelName]
-		models = append(models, modelInfo)
 	}
 
 	return models, nil
@@ -92,46 +86,56 @@ func (s *ModelService) GetModelsByProvider(ctx context.Context, provider string)
 	return filtered, nil
 }
 
-// GetModelInfo returns information about a specific model
-func (s *ModelService) GetModelInfo(ctx context.Context, modelName string) (*ModelInfo, error) {
+// GetModelsGroupedByProvider returns models grouped by provider
+func (s *ModelService) GetModelsGroupedByProvider(ctx context.Context) ([]*ModelGroup, error) {
 	allModels, err := s.GetAllModels(ctx)
 	if err != nil {
 		return nil, err
 	}
 
+	// Group by provider
+	groupMap := make(map[string][]*ModelInfo)
+	for _, model := range allModels {
+		groupMap[model.Provider] = append(groupMap[model.Provider], model)
+	}
+
+	// Convert to slice
+	groups := make([]*ModelGroup, 0, len(groupMap))
+	for provider, models := range groupMap {
+		groups = append(groups, &ModelGroup{
+			Provider: provider,
+			Models:   models,
+			Count:    len(models),
+		})
+	}
+
+	return groups, nil
+}
+
+// GetModelInfo returns information about a specific model
+// If multiple configs provide the same model, returns all of them
+func (s *ModelService) GetModelInfo(ctx context.Context, modelName string) ([]*ModelInfo, error) {
+	allModels, err := s.GetAllModels(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	matches := make([]*ModelInfo, 0)
 	for _, model := range allModels {
 		if model.Name == modelName {
-			return model, nil
+			matches = append(matches, model)
 		}
 	}
 
-	return nil, fmt.Errorf("model not found: %s", modelName)
+	if len(matches) == 0 {
+		return nil, fmt.Errorf("model not found: %s", modelName)
+	}
+
+	return matches, nil
 }
 
-// inferProvider infers the provider from model name or config type
-func (s *ModelService) inferProvider(modelName, configType string) string {
-	modelLower := strings.ToLower(modelName)
-
-	// Check model name patterns
-	if strings.HasPrefix(modelLower, "gpt-") || strings.Contains(modelLower, "davinci") ||
-		strings.Contains(modelLower, "curie") || strings.Contains(modelLower, "babbage") {
-		return "OpenAI"
-	}
-	if strings.HasPrefix(modelLower, "claude-") || strings.Contains(modelLower, "claude") {
-		return "Anthropic"
-	}
-	if strings.HasPrefix(modelLower, "gemini-") || strings.Contains(modelLower, "gemini") ||
-		strings.Contains(modelLower, "palm") {
-		return "Google"
-	}
-	if strings.Contains(modelLower, "llama") {
-		return "Meta"
-	}
-	if strings.Contains(modelLower, "mistral") {
-		return "Mistral"
-	}
-
-	// Fall back to config type
+// normalizeProvider normalizes provider names
+func (s *ModelService) normalizeProvider(configType string) string {
 	switch strings.ToLower(configType) {
 	case "openai":
 		return "OpenAI"

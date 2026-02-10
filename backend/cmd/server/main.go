@@ -58,6 +58,8 @@ func main() {
 	signInRepo := repository.NewSignInRepository(db)
 	requestLogRepo := repository.NewRequestLogRepository(db)
 	lbRepo := repository.NewLoadBalancerRepository(db)
+	pricingRepo := repository.NewPricingRepository(db)
+	_ = repository.NewBillingTransactionRepository(db) // For future use
 
 	// Initialize services
 	authService := service.NewAuthService(userRepo, cfg.JWT.Secret)
@@ -65,10 +67,12 @@ func main() {
 	apiConfigService := service.NewAPIConfigService(apiConfigRepo)
 	modelService := service.NewModelService(apiConfigRepo)
 	userService := service.NewUserService(userRepo)
-	quotaService := service.NewQuotaService(userRepo, signInRepo)
+	quotaService := service.NewQuotaServiceWithLogs(userRepo, signInRepo, requestLogRepo)
 	statsService := service.NewStatsService(userRepo, requestLogRepo)
 	logService := service.NewLogService(requestLogRepo)
-	proxyService := service.NewProxyService(apiKeyRepo, apiConfigRepo, userRepo, requestLogRepo, quotaService)
+	pricingService := service.NewPricingService(pricingRepo)
+	billingService := service.NewBillingService(userRepo, pricingService)
+	proxyService := service.NewProxyServiceWithLB(apiKeyRepo, apiConfigRepo, userRepo, requestLogRepo, lbRepo, quotaService, billingService)
 	lbService := service.NewLoadBalancerService(lbRepo)
 
 	// Initialize handlers
@@ -83,6 +87,7 @@ func main() {
 	logHandler := api.NewLogHandler(logService)
 	proxyHandler := api.NewProxyHandler(proxyService)
 	lbHandler := api.NewLoadBalancerHandler(lbService, apiConfigService, modelService)
+	pricingHandler := api.NewPricingHandler(pricingService)
 
 	// Setup router
 	r := gin.Default()
@@ -194,6 +199,14 @@ func main() {
 		adminRoutes.DELETE("/load-balancer/configs/:id", lbHandler.DeleteConfig)
 		adminRoutes.GET("/load-balancer/models/:model/endpoints", lbHandler.GetModelEndpoints)
 		adminRoutes.GET("/models", lbHandler.GetAvailableModels)
+
+		// Pricing management endpoints
+		adminRoutes.GET("/pricings", pricingHandler.GetAllPricings)
+		adminRoutes.GET("/pricings/:id", pricingHandler.GetPricingByID)
+		adminRoutes.POST("/pricings", pricingHandler.CreatePricing)
+		adminRoutes.PUT("/pricings/:id", pricingHandler.UpdatePricing)
+		adminRoutes.DELETE("/pricings/:id", pricingHandler.DeletePricing)
+		adminRoutes.GET("/pricings/by-config", pricingHandler.GetPricingsByAPIConfig)
 	}
 
 	// Start server with timeouts

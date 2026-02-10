@@ -60,3 +60,19 @@ export interface LoginResponse {
   token: string;
   user: User;
 }
+
+// Pricing types
+export interface Pricing {
+  id: number;
+  api_config_id: number;
+  api_config?: APIConfig;
+  model_name: string;
+  input_price: number;
+  output_price: number;
+  currency: string;
+  unit: number;
+  is_active: boolean;
+  description?: string;
+  created_at: string;
+  updated_at: string;
+}
