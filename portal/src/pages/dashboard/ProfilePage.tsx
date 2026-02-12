@@ -40,6 +40,12 @@ const ProfilePage = () => {
     queryFn: quotaService.getQuotaInfo,
   });
 
+  // Fetch usage history (7 days)
+  const { data: usageHistory, isLoading: historyLoading } = useQuery({
+    queryKey: ['usageHistory', 7],
+    queryFn: () => quotaService.getUsageHistory(7),
+  });
+
   // Calculate usage percentage
   const usagePercentage = quotaInfo
     ? Math.round((quotaInfo.used_quota / quotaInfo.total_quota) * 100)
@@ -57,17 +63,15 @@ const ProfilePage = () => {
     });
   };
 
-  // Mock usage history data (7 days)
-  // In a real implementation, this would come from an API endpoint
-  const usageHistoryData = [
-    { date: '周一', tokens: 1200 },
-    { date: '周二', tokens: 1800 },
-    { date: '周三', tokens: 2100 },
-    { date: '周四', tokens: 1500 },
-    { date: '周五', tokens: 2400 },
-    { date: '周六', tokens: 1900 },
-    { date: '周日', tokens: 1600 },
-  ];
+  // Transform usage history data for chart
+  const usageHistoryData = usageHistory?.map((item, index) => {
+    const date = new Date(item.date);
+    const dayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+    return {
+      date: dayNames[date.getDay()],
+      tokens: item.tokens,
+    };
+  }) || [];
 
   const chartConfig = {
     data: usageHistoryData,
@@ -251,34 +255,43 @@ const ProfilePage = () => {
             <span>使用历史（近7天）</span>
           </Space>
         }
+        loading={historyLoading}
       >
-        <Column {...chartConfig} height={300} />
-        <Divider />
-        <Row gutter={[16, 16]}>
-          <Col xs={24} sm={8}>
-            <Statistic
-              title="7日总使用"
-              value={usageHistoryData.reduce((sum, item) => sum + item.tokens, 0)}
-              suffix="tokens"
-            />
-          </Col>
-          <Col xs={24} sm={8}>
-            <Statistic
-              title="日均使用"
-              value={Math.round(
-                usageHistoryData.reduce((sum, item) => sum + item.tokens, 0) / 7
-              )}
-              suffix="tokens"
-            />
-          </Col>
-          <Col xs={24} sm={8}>
-            <Statistic
-              title="最高单日"
-              value={Math.max(...usageHistoryData.map((item) => item.tokens))}
-              suffix="tokens"
-            />
-          </Col>
-        </Row>
+        {usageHistoryData.length > 0 ? (
+          <>
+            <Column {...chartConfig} height={300} />
+            <Divider />
+            <Row gutter={[16, 16]}>
+              <Col xs={24} sm={8}>
+                <Statistic
+                  title="7日总使用"
+                  value={usageHistoryData.reduce((sum, item) => sum + item.tokens, 0)}
+                  suffix="tokens"
+                />
+              </Col>
+              <Col xs={24} sm={8}>
+                <Statistic
+                  title="日均使用"
+                  value={Math.round(
+                    usageHistoryData.reduce((sum, item) => sum + item.tokens, 0) / 7
+                  )}
+                  suffix="tokens"
+                />
+              </Col>
+              <Col xs={24} sm={8}>
+                <Statistic
+                  title="最高单日"
+                  value={Math.max(...usageHistoryData.map((item) => item.tokens))}
+                  suffix="tokens"
+                />
+              </Col>
+            </Row>
+          </>
+        ) : (
+          <div style={{ textAlign: 'center', padding: '40px 0' }}>
+            <Text type="secondary">暂无使用数据</Text>
+          </div>
+        )}
       </Card>
     </div>
   );

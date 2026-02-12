@@ -24,40 +24,20 @@ export const statsService = {
     return response.data;
   },
 
-  // 获取请求趋势（模拟数据，实际应该从后端获取）
+  // 获取请求趋势
   getRequestTrend: async (days: number = 7): Promise<RequestTrend[]> => {
-    // TODO: 实际应该调用后端API
-    // const response = await apiClient.get<RequestTrend[]>(`/admin/stats/trend?days=${days}`);
-    // return response.data;
-    
-    // 模拟数据
-    const today = new Date();
-    const trend: RequestTrend[] = [];
-    for (let i = days - 1; i >= 0; i--) {
-      const date = new Date(today);
-      date.setDate(date.getDate() - i);
-      trend.push({
-        date: date.toISOString().split('T')[0],
-        count: Math.floor(Math.random() * 1000) + 500,
-      });
-    }
-    return trend;
+    const response = await apiClient.get<RequestTrend[]>('/admin/stats/trend', {
+      params: { days },
+    });
+    return response.data;
   },
 
-  // 获取模型使用排行（模拟数据，实际应该从后端获取）
-  getModelUsage: async (): Promise<ModelUsage[]> => {
-    // TODO: 实际应该调用后端API
-    // const response = await apiClient.get<ModelUsage[]>('/admin/stats/models');
-    // return response.data;
-    
-    // 模拟数据
-    return [
-      { model: 'gpt-4', count: 1250 },
-      { model: 'gpt-3.5-turbo', count: 980 },
-      { model: 'claude-3-opus', count: 750 },
-      { model: 'claude-3-sonnet', count: 620 },
-      { model: 'gemini-pro', count: 450 },
-    ];
+  // 获取模型使用排行
+  getModelUsage: async (limit: number = 10): Promise<ModelUsage[]> => {
+    const response = await apiClient.get<ModelUsage[]>('/admin/stats/models', {
+      params: { limit },
+    });
+    return response.data;
   },
 
   // 获取最近日志

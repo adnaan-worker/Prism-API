@@ -38,6 +38,12 @@ const OverviewPage = () => {
     refetchInterval: 30000, // Refetch every 30 seconds
   });
 
+  // Fetch usage history (7 days)
+  const { data: usageHistory, isLoading: historyLoading } = useQuery({
+    queryKey: ['usageHistory', 7],
+    queryFn: () => quotaService.getUsageHistory(7),
+  });
+
   // Check if user has signed in today
   useEffect(() => {
     if (quotaInfo?.last_sign_in) {
@@ -78,16 +84,15 @@ const OverviewPage = () => {
     ? Math.round((quotaInfo.used_quota / quotaInfo.total_quota) * 100)
     : 0;
 
-  // Mock usage trend data (since we don't have historical data endpoint yet)
-  const usageTrendData = [
-    { date: '周一', usage: 1200 },
-    { date: '周二', usage: 1800 },
-    { date: '周三', usage: 2100 },
-    { date: '周四', usage: 1500 },
-    { date: '周五', usage: 2400 },
-    { date: '周六', usage: 1900 },
-    { date: '周日', usage: 1600 },
-  ];
+  // Transform usage history data for chart
+  const usageTrendData = usageHistory?.map((item, index) => {
+    const date = new Date(item.date);
+    const dayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+    return {
+      date: dayNames[date.getDay()],
+      usage: item.tokens,
+    };
+  }) || [];
 
   const chartConfig = {
     data: usageTrendData,
@@ -215,8 +220,14 @@ const OverviewPage = () => {
       </Card>
 
       {/* Usage Trend Chart */}
-      <Card style={{ marginTop: 16 }} title="使用趋势（近7天）">
-        <Line {...chartConfig} height={300} />
+      <Card style={{ marginTop: 16 }} title="使用趋势（近7天）" loading={historyLoading}>
+        {usageTrendData.length > 0 ? (
+          <Line {...chartConfig} height={300} />
+        ) : (
+          <div style={{ textAlign: 'center', padding: '40px 0' }}>
+            <Text type="secondary">暂无使用数据</Text>
+          </div>
+        )}
       </Card>
 
       {/* Quick Start Guide */}

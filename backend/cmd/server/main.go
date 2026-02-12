@@ -237,6 +237,8 @@ func main() {
 
 		// Statistics and logging endpoints
 		adminRoutes.GET("/stats/overview", statsHandler.GetStatsOverview)
+		adminRoutes.GET("/stats/trend", statsHandler.GetRequestTrend)
+		adminRoutes.GET("/stats/models", statsHandler.GetModelUsage)
 		adminRoutes.GET("/logs", logHandler.GetLogs)
 		adminRoutes.GET("/logs/export", logHandler.ExportLogs)
 

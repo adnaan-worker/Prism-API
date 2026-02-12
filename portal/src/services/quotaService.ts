@@ -1,5 +1,5 @@
 import { apiClient } from '../lib/api';
-import { QuotaInfo, SignInResponse } from '../types';
+import { QuotaInfo, SignInResponse, UsageHistoryItem } from '../types';
 
 export const quotaService = {
   // Get quota information
@@ -11,6 +11,14 @@ export const quotaService = {
   // Daily sign-in
   async signIn(): Promise<SignInResponse> {
     const response = await apiClient.post<SignInResponse>('/user/signin');
+    return response.data;
+  },
+
+  // Get usage history
+  async getUsageHistory(days: number = 7): Promise<UsageHistoryItem[]> {
+    const response = await apiClient.get<UsageHistoryItem[]>('/user/usage-history', {
+      params: { days },
+    });
     return response.data;
   },
 };

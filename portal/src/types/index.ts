@@ -65,6 +65,11 @@ export interface SignInResponse {
   quota_awarded: number;
 }
 
+export interface UsageHistoryItem {
+  date: string;
+  tokens: number;
+}
+
 // API Response wrapper
 export interface ApiResponse<T> {
   data?: T;
