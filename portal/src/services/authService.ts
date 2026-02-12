@@ -16,7 +16,7 @@ export const authService = {
 
   // Get current user info
   async getCurrentUser(): Promise<User> {
-    const response = await apiClient.get<{ user: User }>('/user/info');
+    const response = await apiClient.get<{ user: User }>('/auth/profile');
     return response.data.user;
   },
 

@@ -24,4 +24,9 @@ export const cacheService = {
     const response = await apiClient.delete(`/admin/cache/users/${userId}`);
     return response.data;
   },
+  cleanExpiredCache: () => apiClient.delete('/admin/cache/clean'),
+
+  // 清除用户缓存（管理员）
+  clearUserCache: (userId: number) =>
+    apiClient.delete(`/admin/cache/user/${userId}`),
 };
