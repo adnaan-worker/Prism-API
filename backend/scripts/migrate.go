@@ -16,7 +16,7 @@ func main() {
 	// Get database URL from environment variable
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
-		databaseURL = "host=localhost user=postgres password=postgres dbname=api_aggregator port=5432 sslmode=disable"
+		databaseURL = "postgres://postgres:postgres@localhost:5432/prism_api?sslmode=disable"
 	}
 
 	// Connect to database
@@ -29,7 +29,7 @@ func main() {
 
 	fmt.Println("Running database migrations...")
 
-	// Auto migrate all models
+	// Auto migrate all models in correct order (respecting foreign keys)
 	err = db.AutoMigrate(
 		&models.User{},
 		&models.APIKey{},
@@ -67,5 +67,23 @@ func main() {
 	// Index on sign_in_records for daily check
 	db.Exec("CREATE INDEX IF NOT EXISTS idx_sign_in_records_user_created ON sign_in_records(user_id, created_at DESC)")
 
+	// Index on pricings table
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_pricings_api_config_id ON pricings(api_config_id)")
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_pricings_is_active ON pricings(is_active) WHERE deleted_at IS NULL")
+
+	// Index on billing_transactions table
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_billing_transactions_user_id ON billing_transactions(user_id)")
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_billing_transactions_request_log_id ON billing_transactions(request_log_id)")
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_billing_transactions_pricing_id ON billing_transactions(pricing_id)")
+
+	// Index on request_caches table
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_request_caches_user_id ON request_caches(user_id)")
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_request_caches_model ON request_caches(model)")
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_request_caches_expires_at ON request_caches(expires_at)")
+
 	fmt.Println("Migrations completed successfully!")
+	fmt.Println("\nNext steps:")
+	fmt.Println("1. Create an admin user via the registration API")
+	fmt.Println("2. Update the user's is_admin field to true in the database")
+	fmt.Println("3. Configure API providers in the admin panel")
 }
