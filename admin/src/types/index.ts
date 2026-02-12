@@ -76,3 +76,52 @@ export interface Pricing {
   created_at: string;
   updated_at: string;
 }
+
+// Account Pool types
+export interface AccountPool {
+  id: number;
+  name: string;
+  description?: string;
+  provider: string;
+  strategy: string;
+  health_check_interval: number;
+  health_check_timeout: number;
+  max_retries: number;
+  is_active: boolean;
+  total_requests: number;
+  total_errors: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AccountCredential {
+  id: number;
+  created_at: string;
+  updated_at: string;
+  name: string;
+  description?: string;
+  provider: string;
+  auth_type: string;
+  credentials_data: Record<string, any>;
+  expires_at?: string;
+  is_active: boolean;
+  error_message?: string;
+  last_check_at?: string;
+  request_count: number;
+  success_count: number;
+  error_count: number;
+  last_used_at?: string;
+  daily_quota: number;
+  daily_used: number;
+  quota_reset_at?: string;
+  pool_id?: number;
+}
+
+export interface PoolStats {
+  pool_id: number;
+  pool_name: string;
+  provider: string;
+  total_creds: number;
+  active_creds: number;
+  total_requests: number;
+}

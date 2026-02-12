@@ -63,6 +63,7 @@ type APIConfig struct {
 	APIKey    string         `gorm:"type:text" json:"api_key,omitempty"`
 	Models    StringArray    `gorm:"type:jsonb;not null;default:'[]'" json:"models"`
 	Headers   JSONMap        `gorm:"type:jsonb" json:"headers,omitempty"`
+	Metadata  JSONMap        `gorm:"type:jsonb" json:"metadata,omitempty"` // 提供商特定数据（如 Kiro 账号列表）
 	IsActive  bool           `gorm:"not null;default:true" json:"is_active"`
 	Priority  int            `gorm:"not null;default:100" json:"priority"`
 	Weight    int            `gorm:"not null;default:1" json:"weight"`

@@ -66,6 +66,7 @@ func NewProxyServiceWithLB(
 	billingService *BillingService,
 	cacheService *CacheService,
 	cacheConfig *CacheConfig,
+	adapterFactory *adapter.Factory,
 ) *ProxyService {
 	return &ProxyService{
 		apiKeyRepo:     apiKeyRepo,
@@ -79,7 +80,7 @@ func NewProxyServiceWithLB(
 		cacheService:   cacheService,
 		cacheConfig:    cacheConfig,
 		lbFactory:      loadbalancer.NewFactory(),
-		adapterFactory: adapter.NewFactory(),
+		adapterFactory: adapterFactory,
 	}
 }
 
@@ -211,7 +212,8 @@ func (s *ProxyService) ProxyRequest(ctx context.Context, apiKey string, req *ada
 	
 	// Deduct quota
 	if err := s.quotaService.DeductQuota(ctx, user.ID, costToDeduct); err != nil {
-		fmt.Printf("Warning: failed to deduct quota: %v\n", err)
+		// Log quota deduction failure but continue
+		_ = err
 	}
 
 	// 7. Log successful request
@@ -221,9 +223,7 @@ func (s *ProxyService) ProxyRequest(ctx context.Context, apiKey string, req *ada
 	if s.cacheService != nil && cacheConfig.Enabled {
 		// Save response to cache asynchronously
 		go func() {
-			if err := s.cacheService.SaveCachedResponse(context.Background(), req, resp, cacheConfig, keyRecord.UserID); err != nil {
-				fmt.Printf("Warning: failed to save cache: %v\n", err)
-			}
+			_ = s.cacheService.SaveCachedResponse(context.Background(), req, resp, cacheConfig, keyRecord.UserID)
 		}()
 	}
 

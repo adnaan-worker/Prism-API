@@ -51,3 +51,5 @@ temp/
 # 备份文件
 *.bak
 *.backup
+/AIClient-2-API-main
+/Kiro-account-manager-main

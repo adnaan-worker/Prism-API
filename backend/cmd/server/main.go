@@ -2,10 +2,13 @@ package main
 
 import (
 	"api-aggregator/backend/config"
+	"api-aggregator/backend/internal/accountpool"
+	"api-aggregator/backend/internal/adapter"
 	"api-aggregator/backend/internal/api"
 	"api-aggregator/backend/internal/middleware"
 	"api-aggregator/backend/internal/repository"
 	"api-aggregator/backend/internal/service"
+	"api-aggregator/backend/internal/tasks"
 	"api-aggregator/backend/pkg/redis"
 	"database/sql"
 	"fmt"
@@ -60,6 +63,13 @@ func main() {
 	lbRepo := repository.NewLoadBalancerRepository(db)
 	pricingRepo := repository.NewPricingRepository(db)
 	_ = repository.NewBillingTransactionRepository(db) // For future use
+	
+	// Account pool repositories
+	accountPoolRepo := repository.NewAccountPoolRepository(db)
+	accountCredentialRepo := repository.NewAccountCredentialRepository(db)
+	
+	// Kiro model repository for model mapping
+	kiroModelRepo := repository.NewKiroModelRepository(db)
 
 	// Initialize services
 	authService := service.NewAuthService(userRepo, cfg.JWT.Secret)
@@ -90,8 +100,25 @@ func main() {
 		Threshold:     cfg.Cache.Threshold,
 	}
 	
-	proxyService := service.NewProxyServiceWithLB(apiKeyRepo, apiConfigRepo, userRepo, requestLogRepo, lbRepo, quotaService, billingService, cacheService, cacheConfig)
+	// Initialize account pool services BEFORE proxy service
+	accountPoolService := service.NewAccountPoolService(accountPoolRepo, accountCredentialRepo)
+	accountCredentialService := service.NewAccountCredentialService(accountCredentialRepo, accountPoolRepo)
+	
+	// Initialize account pool manager with model mapper
+	poolManager := accountpool.NewManager(accountCredentialRepo, kiroModelRepo)
+	
+	// Set pool manager in adapter factory BEFORE creating proxy service
+	adapterFactory := adapter.NewFactory()
+	adapterFactory.SetPoolManager(poolManager)
+	
+	// NOW create proxy service with the configured adapter factory
+	proxyService := service.NewProxyServiceWithLB(apiKeyRepo, apiConfigRepo, userRepo, requestLogRepo, lbRepo, quotaService, billingService, cacheService, cacheConfig, adapterFactory)
 	lbService := service.NewLoadBalancerService(lbRepo)
+	
+	// Start background tasks
+	poolTasks := tasks.NewAccountPoolTasks(accountCredentialRepo)
+	poolTasks.Start()
+	defer poolTasks.Stop()
 
 	// Initialize handlers
 	authHandler := api.NewAuthHandler(authService)
@@ -107,6 +134,11 @@ func main() {
 	lbHandler := api.NewLoadBalancerHandler(lbService, apiConfigService, modelService)
 	pricingHandler := api.NewPricingHandler(pricingService)
 	cacheHandler := api.NewCacheHandler(cacheService)
+	
+	// Account pool handlers
+	accountPoolHandler := api.NewAccountPoolHandler(accountPoolService)
+	accountCredentialHandler := api.NewAccountCredentialHandler(accountCredentialService)
+	oauthHandler := api.NewOAuthHandler(accountCredentialRepo, accountPoolRepo)
 
 	// Setup router
 	r := gin.Default()
@@ -231,7 +263,32 @@ func main() {
 		// Cache management endpoints
 		adminRoutes.POST("/cache/clean-expired", cacheHandler.CleanExpiredCache)
 		adminRoutes.DELETE("/cache/users/:id", cacheHandler.ClearUserCache)
+		
+		// Account pool management endpoints
+		adminRoutes.GET("/account-pools", accountPoolHandler.GetPools)
+		adminRoutes.GET("/account-pools/:id", accountPoolHandler.GetPool)
+		adminRoutes.POST("/account-pools", accountPoolHandler.CreatePool)
+		adminRoutes.PUT("/account-pools/:id", accountPoolHandler.UpdatePool)
+		adminRoutes.DELETE("/account-pools/:id", accountPoolHandler.DeletePool)
+		adminRoutes.PUT("/account-pools/:id/status", accountPoolHandler.UpdatePoolStatus)
+		adminRoutes.GET("/account-pools/:id/stats", accountPoolHandler.GetPoolStats)
+		
+		// Account credential management endpoints
+		adminRoutes.GET("/account-credentials", accountCredentialHandler.GetCredentials)
+		adminRoutes.GET("/account-credentials/:id", accountCredentialHandler.GetCredential)
+		adminRoutes.POST("/account-credentials", accountCredentialHandler.CreateCredential)
+		adminRoutes.PUT("/account-credentials/:id", accountCredentialHandler.UpdateCredential)
+		adminRoutes.DELETE("/account-credentials/:id", accountCredentialHandler.DeleteCredential)
+		adminRoutes.POST("/account-credentials/:id/refresh", accountCredentialHandler.RefreshCredential)
+		adminRoutes.PUT("/account-credentials/:id/status", accountCredentialHandler.UpdateCredentialStatus)
+		
+		// OAuth endpoints (admin only for initiating OAuth)
+		adminRoutes.POST("/oauth/initiate", oauthHandler.InitiateOAuth)
+		adminRoutes.POST("/oauth/poll-device-code", oauthHandler.PollDeviceCode)
 	}
+	
+	// Public OAuth callback endpoint (no authentication required)
+	r.GET("/api/oauth/callback/:provider", oauthHandler.OAuthCallback)
 
 	// Start server with timeouts
 	addr := fmt.Sprintf(":%s", cfg.Server.Port)

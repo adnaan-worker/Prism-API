@@ -1,107 +1,148 @@
 # Database Migration Scripts
 
-This directory contains database migration scripts for the API Aggregator platform.
+This directory contains database migration and management scripts for the Prism API project.
 
-## Files
+## Quick Start
 
-- `migrate.go` - Go-based migration script using GORM AutoMigrate
-- `schema.sql` - SQL schema file for manual execution or reference
-
-## Running Migrations
-
-### Using Go Script (Recommended)
+### 1. Run Database Migration
 
 ```bash
-# Set database connection
+# Set database connection (optional, defaults to localhost)
 export DATABASE_URL="host=localhost user=postgres password=postgres dbname=api_aggregator port=5432 sslmode=disable"
 
 # Run migration
 cd backend/scripts
-go run migrate.go
+go run migrate_unified.go
 ```
 
-### Using SQL File
+### 2. Create Admin User
 
 ```bash
-# Connect to PostgreSQL and run the schema
-psql -U postgres -d api_aggregator -f schema.sql
+# Create admin user with default credentials
+go run create_admin.go
+
+# Default credentials:
+# Username: admin
+# Email: admin@example.com
+# Password: admin123
 ```
 
-### Using Docker Compose
+## Available Scripts
 
-```bash
-# From project root
-docker-compose up -d postgres
-docker-compose exec backend go run scripts/migrate.go
-```
+### Migration Scripts
+
+- **`migrate_unified.go`** - Main migration script that creates all tables and indexes
+  - Creates all core tables (users, api_keys, api_configs, etc.)
+  - Creates account pool tables (account_pools, account_credentials, account_pool_credentials)
+  - Creates Kiro model mapping table
+  - Initializes Kiro model mappings
+  - Creates performance indexes
+
+- **`migrate.go`** - Legacy migration script (deprecated, use migrate_unified.go instead)
+
+### Management Scripts
+
+- **`create_admin.go`** - Creates an admin user
+  - Username: admin
+  - Email: admin@example.com  
+  - Password: admin123
+  - Quota: 1,000,000 credits
+
+- **`verify_models.go`** - Verifies Kiro model mappings in database
+
+### Test Scripts
+
+- **`migrate_test.go`** - Unit tests for migration functions
+- **`setup_test_db.sh`** - Shell script to setup test database (Linux/Mac)
+- **`setup_test_db.bat`** - Batch script to setup test database (Windows)
 
 ## Database Schema
 
-The migration creates the following tables:
+### Core Tables
 
-1. **users** - User accounts with authentication and quota management
-2. **api_keys** - API keys for user authentication and rate limiting
-3. **api_configs** - Third-party API provider configurations
-4. **load_balancer_configs** - Load balancing strategy configurations per model
-5. **request_logs** - API request logs for analytics and monitoring
-6. **sign_in_records** - Daily sign-in records for quota rewards
+1. **users** - User accounts
+2. **api_keys** - API keys for authentication
+3. **api_configs** - API configuration (endpoints, models, etc.)
+4. **request_logs** - Request history and logs
+5. **sign_in_records** - Daily sign-in records
 
-## Indexes
+### Load Balancing & Pricing
 
-The migration creates optimized indexes for:
-- User lookups by username, email, status
-- API key validation and user association
-- API config filtering by type and priority
-- Request log analytics queries
-- Sign-in record daily checks
+6. **load_balancer_configs** - Load balancing strategies per model
+7. **pricings** - Pricing configuration per model and API config
 
-## Testing Migrations
+### Billing
 
-### Automated Test Setup
+8. **billing_transactions** - All billing operations (charges, refunds, etc.)
 
-The migration tests verify table creation, constraints, indexes, and data integrity.
+### Caching
 
-**Linux/Mac:**
-```bash
-cd backend/scripts
-chmod +x setup_test_db.sh
-./setup_test_db.sh
-```
+9. **request_caches** - Request/response cache with semantic matching
 
-**Windows:**
-```cmd
-cd backend\scripts
-setup_test_db.bat
-```
+### Account Pool System
 
-### Manual Test Setup
+10. **account_pools** - Account pool definitions
+11. **account_credentials** - Individual account credentials
+12. **account_pool_credentials** - Many-to-many relationship between pools and credentials
+13. **kiro_model_mappings** - Model name to Kiro model ID mappings
 
-```bash
-# Create test database
-createdb -U postgres api_aggregator_test
+## Environment Variables
 
-# Set environment variable
-export TEST_DATABASE_URL="host=localhost user=postgres password=postgres dbname=api_aggregator_test port=5432 sslmode=disable"
+- `DATABASE_URL` - PostgreSQL connection string
+  - Default: `host=localhost user=postgres password=postgres dbname=api_aggregator port=5432 sslmode=disable`
 
-# Run tests
-cd backend/scripts
-go test -v
-```
+## Migration Process
 
-### Test Coverage
+The unified migration script (`migrate_unified.go`) performs the following steps:
 
-The migration tests verify:
-- All tables are created successfully
-- Unique constraints on username, email, and API keys
-- Foreign key constraints between tables
-- Default values for all fields
-- JSONB storage for models and headers
-- Soft delete functionality
-- Index creation and effectiveness
+1. **Connect to Database** - Establishes connection using DATABASE_URL
+2. **Auto-Migrate Models** - Uses GORM AutoMigrate for all model structs
+3. **Create Association Tables** - Creates many-to-many relationship tables
+4. **Create Custom Tables** - Creates Kiro model mapping table
+5. **Initialize Data** - Populates Kiro model mappings
+6. **Create Indexes** - Creates performance indexes
 
 ## Notes
 
-- All tables use soft deletes (deleted_at column)
-- JSONB columns are used for flexible data storage (models, headers)
-- Foreign key constraints ensure referential integrity
-- Indexes are optimized for common query patterns
+- All timestamps use `TIMESTAMP` type with timezone support
+- JSON fields use PostgreSQL `jsonb` type for better performance
+- Foreign keys are properly defined with CASCADE delete where appropriate
+- Indexes are created for frequently queried columns
+
+## Troubleshooting
+
+### Connection Failed
+
+```bash
+# Check PostgreSQL is running
+pg_isready -h localhost -p 5432
+
+# Test connection
+psql -h localhost -U postgres -d api_aggregator
+```
+
+### Migration Failed
+
+```bash
+# Drop and recreate database (WARNING: deletes all data)
+psql -h localhost -U postgres -c "DROP DATABASE IF EXISTS api_aggregator"
+psql -h localhost -U postgres -c "CREATE DATABASE api_aggregator"
+
+# Run migration again
+go run migrate_unified.go
+```
+
+### Check Migration Status
+
+```bash
+# Connect to database
+psql -h localhost -U postgres -d api_aggregator
+
+# List all tables
+\dt
+
+# Check specific table structure
+\d users
+\d account_pools
+\d kiro_model_mappings
+```

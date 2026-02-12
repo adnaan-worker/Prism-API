@@ -12,18 +12,38 @@ import {
   message,
   Popconfirm,
   Switch,
+  Tag,
+  Tabs,
+  List,
+  Badge,
+  Tooltip,
+  Descriptions,
+  Statistic,
+  Row,
+  Col,
+  Progress,
 } from 'antd';
 import {
   EditOutlined,
   DeleteOutlined,
   ApiOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  DatabaseOutlined,
+  UserOutlined,
+  SyncOutlined,
+  EyeOutlined,
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiConfigService } from '../services/apiConfigService';
-import type { APIConfig } from '../types';
+import { accountPoolService } from '../services/accountPoolService';
+import type { APIConfig, AccountCredential } from '../types';
 import type { ColumnsType } from 'antd/es/table';
 import TableToolbar from '../components/TableToolbar';
 import ProviderTag from '../components/ProviderTag';
+import AccountPoolManager from '../components/AccountPoolManager';
 import { useTable } from '../hooks/useTable';
 import { useModal } from '../hooks/useModal';
 import { formatDateTime } from '../utils/format';
@@ -36,8 +56,109 @@ const ApiConfigsPage: React.FC = () => {
   const [typeFilter, setTypeFilter] = React.useState<string | undefined>();
   const configModal = useModal<APIConfig>();
   const [fetchingModels, setFetchingModels] = React.useState(false);
+  const [selectedType, setSelectedType] = React.useState<string>('');
+  const [currentPoolId, setCurrentPoolId] = React.useState<number | null>(null);
+  
+  // 账号池管理弹窗
+  const [poolManageVisible, setPoolManageVisible] = React.useState(false);
+  const [managingPoolId, setManagingPoolId] = React.useState<number | null>(null);
+  const [managingConfig, setManagingConfig] = React.useState<APIConfig | null>(null);
+  
+  // 账号添加/编辑
+  const [accountModalVisible, setAccountModalVisible] = React.useState(false);
+  const [accountForm] = Form.useForm();
+  const [editingAccount, setEditingAccount] = React.useState<AccountCredential | null>(null);
+  const [viewingAccount, setViewingAccount] = React.useState<AccountCredential | null>(null);
+  const [accountDetailVisible, setAccountDetailVisible] = React.useState(false);
 
   const queryClient = useQueryClient();
+
+  // 获取当前池的账号列表
+  const { data: poolAccounts, refetch: refetchAccounts } = useQuery({
+    queryKey: ['pool-accounts', currentPoolId],
+    queryFn: () => accountPoolService.getCredentials({ pool_id: currentPoolId! }),
+    enabled: !!currentPoolId && selectedType === 'kiro',
+  });
+  
+  // 获取管理池的账号列表
+  const { data: managingPoolAccounts, refetch: refetchManagingAccounts } = useQuery({
+    queryKey: ['managing-pool-accounts', managingPoolId],
+    queryFn: () => accountPoolService.getCredentials({ pool_id: managingPoolId! }),
+    enabled: !!managingPoolId && poolManageVisible,
+  });
+  
+  // 获取管理池的详情
+  const { data: managingPoolData } = useQuery({
+    queryKey: ['managing-pool', managingPoolId],
+    queryFn: () => accountPoolService.getPool(managingPoolId!),
+    enabled: !!managingPoolId && poolManageVisible,
+  });
+
+  // 创建账号池（用于 Kiro）
+  const createPoolMutation = useMutation({
+    mutationFn: accountPoolService.createPool,
+    onSuccess: (pool) => {
+      setCurrentPoolId(pool.id);
+      message.success('账号池创建成功');
+    },
+    onError: () => {
+      message.error('账号池创建失败');
+    },
+  });
+
+  // 添加账号
+  const addAccountMutation = useMutation({
+    mutationFn: accountPoolService.createCredential,
+    onSuccess: () => {
+      message.success('账号添加成功');
+      refetchAccounts();
+      setAccountModalVisible(false);
+      accountForm.resetFields();
+    },
+    onError: () => {
+      message.error('账号添加失败');
+    },
+  });
+
+  // 更新账号
+  const updateAccountMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: any }) =>
+      accountPoolService.updateCredential(id, data),
+    onSuccess: () => {
+      message.success('账号更新成功');
+      refetchAccounts();
+      setAccountModalVisible(false);
+      accountForm.resetFields();
+      setEditingAccount(null);
+    },
+    onError: () => {
+      message.error('账号更新失败');
+    },
+  });
+
+  // 删除账号
+  const deleteAccountMutation = useMutation({
+    mutationFn: accountPoolService.deleteCredential,
+    onSuccess: () => {
+      message.success('账号删除成功');
+      refetchAccounts();
+    },
+    onError: () => {
+      message.error('账号删除失败');
+    },
+  });
+
+  // 刷新账号令牌
+  const refreshAccountMutation = useMutation({
+    mutationFn: accountPoolService.refreshCredential,
+    onSuccess: () => {
+      message.success('令牌刷新成功');
+      refetchAccounts();
+    },
+    onError: () => {
+      message.error('令牌刷新失败');
+    },
+  });
 
   // 获取API配置列表
   const { data, isLoading, refetch } = useQuery({
@@ -143,6 +264,7 @@ const ApiConfigsPage: React.FC = () => {
         { text: 'OpenAI', value: 'openai' },
         { text: 'Anthropic', value: 'anthropic' },
         { text: 'Gemini', value: 'gemini' },
+        { text: 'Kiro', value: 'kiro' },
         { text: 'Custom', value: 'custom' },
       ],
       onFilter: (value, record) => record.type === value,
@@ -205,35 +327,59 @@ const ApiConfigsPage: React.FC = () => {
       title: '操作',
       key: 'action',
       fixed: 'right',
-      width: 150,
-      render: (_, record) => (
-        <Space>
-          <Button
-            type="link"
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => handleEdit(record)}
-          >
-            编辑
-          </Button>
-          <Popconfirm
-            title="确定要删除该配置吗？"
-            onConfirm={() => deleteMutation.mutate(record.id)}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Button type="link" size="small" danger icon={<DeleteOutlined />}>
-              删除
+      width: 200,
+      render: (_, record) => {
+        // 检查是否是账号池类型
+        const isAccountPool = record.base_url && record.base_url.startsWith('account_pool:');
+        const poolId = isAccountPool ? parseInt(record.base_url.split(':')[2]) : null;
+        
+        return (
+          <Space>
+            {isAccountPool && poolId && (
+              <Tooltip title="管理账号池">
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<DatabaseOutlined />}
+                  onClick={() => {
+                    setManagingPoolId(poolId);
+                    setManagingConfig(record);
+                    setPoolManageVisible(true);
+                  }}
+                >
+                  账号
+                </Button>
+              </Tooltip>
+            )}
+            <Button
+              type="link"
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => handleEdit(record)}
+            >
+              编辑
             </Button>
-          </Popconfirm>
-        </Space>
-      ),
+            <Popconfirm
+              title="确定要删除该配置吗？"
+              onConfirm={() => deleteMutation.mutate(record.id)}
+              okText="确定"
+              cancelText="取消"
+            >
+              <Button type="link" size="small" danger icon={<DeleteOutlined />}>
+                删除
+              </Button>
+            </Popconfirm>
+          </Space>
+        );
+      },
     },
   ];
 
   // 打开添加模态框
-  const handleAdd = () => {
+  const handleAdd = async () => {
     configModal.showModal();
+    setSelectedType('');
+    setCurrentPoolId(null);
     configModal.form.setFieldsValue({
       priority: 100,
       weight: 1,
@@ -245,9 +391,71 @@ const ApiConfigsPage: React.FC = () => {
   // 打开编辑模态框
   const handleEdit = (config: APIConfig) => {
     configModal.showModal(config);
+    setSelectedType(config.type);
+    
+    // 如果是 Kiro 类型且使用账号池，解析 pool_id
+    let poolId: number | null = null;
+    if (config.type === 'kiro' && config.base_url.startsWith('account_pool:')) {
+      const parts = config.base_url.split(':');
+      if (parts.length === 3) {
+        poolId = parseInt(parts[2]);
+        setCurrentPoolId(poolId);
+      }
+    }
+    
     configModal.form.setFieldsValue({
       ...config,
       models: config.models.join('\n'),
+    });
+  };
+
+  // 添加账号
+  const handleAddAccount = () => {
+    setEditingAccount(null);
+    accountForm.resetFields();
+    accountForm.setFieldsValue({
+      pool_id: currentPoolId,
+      provider: 'kiro',
+      region: 'us-east-1',
+    });
+    setAccountModalVisible(true);
+  };
+
+  // 编辑账号
+  const handleEditAccount = (account: AccountCredential) => {
+    setEditingAccount(account);
+    accountForm.setFieldsValue({
+      name: account.name,
+      credentials_data: JSON.stringify(account.credentials_data, null, 2),
+    });
+    setAccountModalVisible(true);
+  };
+
+  // 提交账号表单
+  const handleAccountSubmit = () => {
+    accountForm.validateFields().then((values) => {
+      let credData = values.credentials_data;
+      if (typeof credData === 'string') {
+        try {
+          credData = JSON.parse(credData);
+        } catch (e) {
+          message.error('凭据数据格式错误');
+          return;
+        }
+      }
+
+      const data = {
+        ...values,
+        credentials_data: credData,
+        pool_id: currentPoolId,
+        provider: 'kiro',
+      };
+
+      if (editingAccount) {
+        updateAccountMutation.mutate({ id: editingAccount.id, data });
+      } else {
+        addAccountMutation.mutate(data);
+      }
     });
   };
 
@@ -294,15 +502,36 @@ const ApiConfigsPage: React.FC = () => {
   };
 
   // 提交表单
-  const handleSubmit = () => {
-    configModal.form.validateFields().then((values) => {
+  const handleSubmit = async () => {
+    try {
+      const values = await configModal.form.validateFields();
+      
       const modelsArray =
         typeof values.models === 'string'
           ? values.models.split('\n').filter((m: string) => m.trim())
           : values.models;
 
+      let baseUrl = values.base_url;
+      let poolId = currentPoolId;
+      
+      // 如果是 Kiro 类型，需要确保有账号池
+      if (values.type === 'kiro') {
+        if (!poolId) {
+          // 创建新的账号池
+          const pool = await createPoolMutation.mutateAsync({
+            name: `${values.name} - Account Pool`,
+            provider: 'kiro',
+            description: `Auto-created pool for ${values.name}`,
+            is_active: true,
+          });
+          poolId = pool.id;
+        }
+        baseUrl = `account_pool:kiro:${poolId}`;
+      }
+
       const data = {
         ...values,
+        base_url: baseUrl,
         models: modelsArray,
       };
 
@@ -311,7 +540,9 @@ const ApiConfigsPage: React.FC = () => {
       } else {
         createMutation.mutate(data);
       }
-    });
+    } catch (error) {
+      console.error('Form validation failed:', error);
+    }
   };
 
   // 批量删除
@@ -365,6 +596,7 @@ const ApiConfigsPage: React.FC = () => {
                 <Option value="openai">OpenAI</Option>
                 <Option value="anthropic">Anthropic</Option>
                 <Option value="gemini">Gemini</Option>
+                <Option value="kiro">Kiro</Option>
                 <Option value="custom">Custom</Option>
               </Select>
             </>
@@ -414,53 +646,184 @@ const ApiConfigsPage: React.FC = () => {
             name="type"
             rules={[{ required: true, message: '请选择类型' }]}
           >
-            <Select placeholder="选择API类型">
+            <Select 
+              placeholder="选择API类型"
+              onChange={(value) => {
+                setSelectedType(value);
+                // 清空相关字段
+                if (value === 'kiro') {
+                  configModal.form.setFieldsValue({
+                    base_url: '',
+                    api_key: '',
+                  });
+                } else {
+                  configModal.form.setFieldsValue({
+                    pool_id: undefined,
+                  });
+                }
+              }}
+            >
               <Option value="openai">OpenAI</Option>
               <Option value="anthropic">Anthropic</Option>
               <Option value="gemini">Gemini</Option>
+              <Option value="kiro">Kiro (账号池)</Option>
               <Option value="custom">Custom</Option>
             </Select>
           </Form.Item>
 
-          <Form.Item
-            label="Base URL"
-            name="base_url"
-            rules={[
-              { required: true, message: '请输入Base URL' },
-              { type: 'url', message: '请输入有效的URL' },
-            ]}
-          >
-            <Input placeholder="https://api.openai.com" />
-          </Form.Item>
+          {selectedType === 'kiro' ? (
+            <>
+              {/* Kiro 账号管理 */}
+              <Form.Item label="Kiro 账号管理">
+                <Card size="small">
+                  <Space direction="vertical" style={{ width: '100%' }}>
+                    <Space>
+                      <Button
+                        type="primary"
+                        icon={<PlusOutlined />}
+                        onClick={handleAddAccount}
+                        disabled={!currentPoolId && !configModal.editingItem}
+                      >
+                        添加账号
+                      </Button>
+                      <Button
+                        icon={<ReloadOutlined />}
+                        onClick={() => refetchAccounts()}
+                        disabled={!currentPoolId}
+                      >
+                        刷新
+                      </Button>
+                      {!currentPoolId && !configModal.editingItem && (
+                        <Tag color="orange">保存配置后可添加账号</Tag>
+                      )}
+                    </Space>
 
-          <Form.Item label="API Key" name="api_key">
-            <Input.Password placeholder="sk-..." />
-          </Form.Item>
+                    <List
+                      dataSource={poolAccounts || []}
+                      locale={{ emptyText: '暂无账号，请添加' }}
+                      renderItem={(account: AccountCredential) => (
+                        <List.Item
+                          actions={[
+                            <Tooltip title="刷新令牌">
+                              <Button
+                                type="link"
+                                size="small"
+                                icon={<ReloadOutlined />}
+                                onClick={() => refreshAccountMutation.mutate(account.id)}
+                              />
+                            </Tooltip>,
+                            <Button
+                              type="link"
+                              size="small"
+                              icon={<EditOutlined />}
+                              onClick={() => handleEditAccount(account)}
+                            >
+                              编辑
+                            </Button>,
+                            <Popconfirm
+                              title="确定删除此账号？"
+                              onConfirm={() => deleteAccountMutation.mutate(account.id)}
+                            >
+                              <Button type="link" size="small" danger icon={<DeleteOutlined />}>
+                                删除
+                              </Button>
+                            </Popconfirm>,
+                          ]}
+                        >
+                          <List.Item.Meta
+                            avatar={
+                              account.is_active ? (
+                                <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 20 }} />
+                              ) : (
+                                <CloseCircleOutlined style={{ color: '#ff4d4f', fontSize: 20 }} />
+                              )
+                            }
+                            title={
+                              <Space>
+                                {account.name || `账号 ${account.id}`}
+                                <Badge
+                                  status={account.is_active ? 'success' : 'error'}
+                                  text={account.is_active ? '活跃' : '禁用'}
+                                />
+                              </Space>
+                            }
+                            description={
+                              <Space direction="vertical" size="small">
+                                <span>区域: {account.credentials_data?.region || 'us-east-1'}</span>
+                                <span>请求次数: {account.request_count || 0}</span>
+                                {account.last_used_at && (
+                                  <span>最后使用: {formatDateTime(account.last_used_at)}</span>
+                                )}
+                              </Space>
+                            }
+                          />
+                        </List.Item>
+                      )}
+                    />
+                  </Space>
+                </Card>
+              </Form.Item>
+              
+              <Form.Item
+                label="支持的模型"
+                name="models"
+                rules={[{ required: true, message: '请输入支持的模型' }]}
+                extra="Kiro 支持的 Claude 模型，每行一个"
+              >
+                <TextArea
+                  rows={4}
+                  placeholder={'claude-sonnet-4-5\nclaude-haiku-4-5\nclaude-opus-4-5\nclaude-opus-4-6'}
+                />
+              </Form.Item>
 
-          <Form.Item
-            label={
-              <Space>
-                <span>支持的模型</span>
-                <Button
-                  type="link"
-                  size="small"
-                  icon={<ApiOutlined />}
-                  loading={fetchingModels}
-                  onClick={handleFetchModels}
-                >
-                  获取模型
-                </Button>
-              </Space>
-            }
-            name="models"
-            rules={[{ required: true, message: '请输入支持的模型' }]}
-            extra='每行一个模型名称，或点击"获取模型"自动获取'
-          >
-            <TextArea
-              rows={6}
-              placeholder={'gpt-4\ngpt-3.5-turbo\ngpt-4-turbo'}
-            />
-          </Form.Item>
+              {/* 隐藏字段 */}
+              <Form.Item name="base_url" hidden>
+                <Input />
+              </Form.Item>
+            </>
+          ) : (
+            <>
+              <Form.Item
+                label="Base URL"
+                name="base_url"
+                rules={[
+                  { required: true, message: '请输入Base URL' },
+                  { type: 'url', message: '请输入有效的URL' },
+                ]}
+              >
+                <Input placeholder="https://api.openai.com" />
+              </Form.Item>
+
+              <Form.Item label="API Key" name="api_key">
+                <Input.Password placeholder="sk-..." />
+              </Form.Item>
+
+              <Form.Item
+                label={
+                  <Space>
+                    <span>支持的模型</span>
+                    <Button
+                      type="link"
+                      size="small"
+                      icon={<ApiOutlined />}
+                      loading={fetchingModels}
+                      onClick={handleFetchModels}
+                    >
+                      获取模型
+                    </Button>
+                  </Space>
+                }
+                name="models"
+                rules={[{ required: true, message: '请输入支持的模型' }]}
+                extra='每行一个模型名称，或点击"获取模型"自动获取'
+              >
+                <TextArea
+                  rows={6}
+                  placeholder={'gpt-4\ngpt-3.5-turbo\ngpt-4-turbo'}
+                />
+              </Form.Item>
+            </>
+          )}
 
           <Form.Item label="优先级" name="priority">
             <InputNumber
@@ -498,6 +861,62 @@ const ApiConfigsPage: React.FC = () => {
           </Form.Item>
         </Form>
       </Modal>
+
+      {/* 账号添加/编辑模态框 */}
+      <Modal
+        title={editingAccount ? '编辑账号' : '添加账号'}
+        open={accountModalVisible}
+        onOk={handleAccountSubmit}
+        onCancel={() => {
+          setAccountModalVisible(false);
+          accountForm.resetFields();
+          setEditingAccount(null);
+        }}
+        confirmLoading={addAccountMutation.isPending || updateAccountMutation.isPending}
+        width={600}
+      >
+        <Form form={accountForm} layout="vertical">
+          <Form.Item
+            label="账号名称"
+            name="name"
+            rules={[{ required: true, message: '请输入账号名称' }]}
+          >
+            <Input placeholder="例如: Kiro Account 1" />
+          </Form.Item>
+
+          <Form.Item
+            label="凭据数据"
+            name="credentials_data"
+            rules={[{ required: true, message: '请输入凭据数据' }]}
+            extra="JSON 格式，包含 access_token, refresh_token, profile_arn, region 等字段"
+          >
+            <TextArea
+              rows={10}
+              placeholder={`{
+  "access_token": "...",
+  "refresh_token": "...",
+  "profile_arn": "...",
+  "region": "us-east-1",
+  "auth_method": "social"
+}`}
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
+      
+      {/* 账号池管理弹窗 */}
+      {managingPoolId && managingConfig && (
+        <AccountPoolManager
+          visible={poolManageVisible}
+          poolId={managingPoolId}
+          poolName={managingConfig.name}
+          onClose={() => {
+            setPoolManageVisible(false);
+            setManagingPoolId(null);
+            setManagingConfig(null);
+          }}
+        />
+      )}
     </div>
   );
 };

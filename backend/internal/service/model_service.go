@@ -16,6 +16,8 @@ type ModelInfo struct {
 	ConfigName  string `json:"config_name"`
 	BaseURL     string `json:"base_url"`
 	IsActive    bool   `json:"is_active"`
+	Status      string `json:"status"` // "active" or "inactive" for frontend
+	ConfigCount int    `json:"config_count"` // Number of configs providing this model
 	Description string `json:"description"`
 }
 
@@ -39,7 +41,7 @@ func NewModelService(configRepo *repository.APIConfigRepository) *ModelService {
 }
 
 // GetAllModels returns all available models from active API configurations
-// Each configuration's models are listed separately (no deduplication)
+// Models are deduplicated by name, with config_count showing how many configs provide each model
 func (s *ModelService) GetAllModels(ctx context.Context) ([]*ModelInfo, error) {
 	// Get all active configurations
 	configs, err := s.configRepo.FindActive(ctx)
@@ -47,23 +49,48 @@ func (s *ModelService) GetAllModels(ctx context.Context) ([]*ModelInfo, error) {
 		return nil, fmt.Errorf("failed to get active configs: %w", err)
 	}
 
-	models := make([]*ModelInfo, 0)
+	// Use map to deduplicate models and count configs
+	modelMap := make(map[string]*ModelInfo)
 
 	for _, config := range configs {
 		provider := s.normalizeProvider(config.Type)
 		
 		for _, modelName := range config.Models {
-			models = append(models, &ModelInfo{
-				Name:        modelName,
-				Provider:    provider,
-				Type:        "chat",
-				ConfigID:    config.ID,
-				ConfigName:  config.Name,
-				BaseURL:     config.BaseURL,
-				IsActive:    config.IsActive,
-				Description: fmt.Sprintf("%s - %s", provider, config.Name),
-			})
+			if existing, ok := modelMap[modelName]; ok {
+				// Model already exists, increment config count
+				existing.ConfigCount++
+				// If any config is active, mark model as active
+				if config.IsActive {
+					existing.IsActive = true
+					existing.Status = "active"
+				}
+			} else {
+				// New model
+				status := "inactive"
+				if config.IsActive {
+					status = "active"
+				}
+				
+				modelMap[modelName] = &ModelInfo{
+					Name:        modelName,
+					Provider:    provider,
+					Type:        "chat",
+					ConfigID:    config.ID,
+					ConfigName:  config.Name,
+					BaseURL:     config.BaseURL,
+					IsActive:    config.IsActive,
+					Status:      status,
+					ConfigCount: 1,
+					Description: s.getModelDescription(modelName, provider),
+				}
+			}
 		}
+	}
+
+	// Convert map to slice
+	models := make([]*ModelInfo, 0, len(modelMap))
+	for _, model := range modelMap {
+		models = append(models, model)
 	}
 
 	return models, nil
@@ -113,39 +140,59 @@ func (s *ModelService) GetModelsGroupedByProvider(ctx context.Context) ([]*Model
 }
 
 // GetModelInfo returns information about a specific model
-// If multiple configs provide the same model, returns all of them
+// Returns deduplicated model info with config count
 func (s *ModelService) GetModelInfo(ctx context.Context, modelName string) ([]*ModelInfo, error) {
 	allModels, err := s.GetAllModels(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	matches := make([]*ModelInfo, 0)
 	for _, model := range allModels {
 		if model.Name == modelName {
-			matches = append(matches, model)
+			return []*ModelInfo{model}, nil
 		}
 	}
 
-	if len(matches) == 0 {
-		return nil, fmt.Errorf("model not found: %s", modelName)
-	}
-
-	return matches, nil
+	return nil, fmt.Errorf("model not found: %s", modelName)
 }
 
 // normalizeProvider normalizes provider names
 func (s *ModelService) normalizeProvider(configType string) string {
 	switch strings.ToLower(configType) {
 	case "openai":
-		return "OpenAI"
+		return "openai"
 	case "anthropic":
-		return "Anthropic"
+		return "anthropic"
 	case "gemini":
-		return "Google"
+		return "gemini"
+	case "kiro":
+		return "kiro"
 	default:
-		return "Custom"
+		return "custom"
 	}
+}
+
+// getModelDescription returns a description for a model
+func (s *ModelService) getModelDescription(modelName, provider string) string {
+	// Common model descriptions
+	descriptions := map[string]string{
+		"gpt-4":                    "OpenAI's most capable model, great for complex tasks",
+		"gpt-4-turbo":              "Faster and more affordable GPT-4 variant",
+		"gpt-3.5-turbo":            "Fast and efficient model for most tasks",
+		"claude-3-opus":            "Anthropic's most powerful model for complex reasoning",
+		"claude-3-sonnet":          "Balanced performance and speed",
+		"claude-3-haiku":           "Fast and cost-effective Claude model",
+		"claude-sonnet-4-5":        "Latest Claude Sonnet model with improved capabilities",
+		"gemini-pro":               "Google's advanced AI model",
+		"gemini-1.5-pro":           "Enhanced Gemini with larger context window",
+	}
+	
+	if desc, ok := descriptions[modelName]; ok {
+		return desc
+	}
+	
+	// Default description
+	return fmt.Sprintf("%s model provided by %s", modelName, provider)
 }
 
 // GetUniqueModels returns deduplicated list of model names

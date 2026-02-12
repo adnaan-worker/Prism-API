@@ -36,6 +36,7 @@ export function useModal<T = any>() {
     isEditing,
     showModal,
     hideModal,
-    setVisible,
+    // 兼容旧的命名
+    isModalVisible: visible,
   };
 }

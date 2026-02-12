@@ -106,10 +106,8 @@ func (s *CacheService) SaveCachedResponse(
 	var embedding []float64
 	if config.SemanticMatch && s.embeddingService != nil && queryText != "" {
 		embedding, err = s.embeddingService.GetEmbedding(ctx, queryText)
-		if err != nil {
-			// 向量生成失败不影响缓存保存，只是不能进行语义匹配
-			fmt.Printf("Warning: failed to generate embedding: %v\n", err)
-		}
+		// 向量生成失败不影响缓存保存，只是不能进行语义匹配
+		_ = err
 	}
 
 	// 将向量序列化为 JSON
@@ -262,7 +260,6 @@ func (s *CacheService) getSemanticMatch(
 	queryEmbedding, err := s.embeddingService.GetEmbedding(ctx, queryText)
 	if err != nil {
 		// 向量生成失败，回退到简单匹配
-		fmt.Printf("Warning: failed to generate query embedding, falling back to simple match: %v\n", err)
 		return s.getSemanticMatchSimple(ctx, req, threshold, ttl)
 	}
 

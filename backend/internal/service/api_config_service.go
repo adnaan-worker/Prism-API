@@ -58,6 +58,7 @@ func (s *APIConfigService) CreateConfig(ctx context.Context, req *CreateConfigRe
 		"openai":    true,
 		"anthropic": true,
 		"gemini":    true,
+		"kiro":      true,
 		"custom":    true,
 	}
 	if !validTypes[req.Type] {
@@ -159,6 +160,7 @@ func (s *APIConfigService) UpdateConfig(ctx context.Context, id uint, req *Updat
 			"openai":    true,
 			"anthropic": true,
 			"gemini":    true,
+			"kiro":      true,
 			"custom":    true,
 		}
 		if !validTypes[req.Type] {

@@ -36,6 +36,7 @@ const PricingPage: React.FC = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingPricing, setEditingPricing] = useState<Pricing | null>(null);
   const [apiConfigFilter, setApiConfigFilter] = useState<number | undefined>();
+  const [selectedApiConfigId, setSelectedApiConfigId] = useState<number | undefined>();
   const [form] = Form.useForm();
 
   const queryClient = useQueryClient();
@@ -45,6 +46,11 @@ const PricingPage: React.FC = () => {
     queryKey: ['api-configs'],
     queryFn: () => apiConfigService.getConfigs({}),
   });
+
+  // 获取选中的 API Config 详情（用于获取支持的模型列表）
+  const selectedApiConfig = apiConfigsData?.configs.find(
+    (config) => config.id === selectedApiConfigId
+  );
 
   // 获取定价列表
   const { data, isLoading, refetch } = useQuery({
@@ -220,6 +226,7 @@ const PricingPage: React.FC = () => {
   // 打开添加模态框
   const handleAdd = () => {
     setEditingPricing(null);
+    setSelectedApiConfigId(undefined);
     form.resetFields();
     form.setFieldsValue({
       currency: 'credits',
@@ -232,6 +239,7 @@ const PricingPage: React.FC = () => {
   // 打开编辑模态框
   const handleEdit = (pricing: Pricing) => {
     setEditingPricing(pricing);
+    setSelectedApiConfigId(pricing.api_config_id);
     form.setFieldsValue({
       ...pricing,
       api_config_id: pricing.api_config_id,
@@ -243,6 +251,7 @@ const PricingPage: React.FC = () => {
   const handleModalClose = () => {
     setModalVisible(false);
     setEditingPricing(null);
+    setSelectedApiConfigId(undefined);
     form.resetFields();
   };
 
@@ -322,6 +331,11 @@ const PricingPage: React.FC = () => {
               showSearch
               optionFilterProp="children"
               disabled={!!editingPricing}
+              onChange={(value) => {
+                setSelectedApiConfigId(value);
+                // 清空模型选择
+                form.setFieldValue('model_name', undefined);
+              }}
             >
               {apiConfigsData?.configs.map((config) => (
                 <Option key={config.id} value={config.id}>
@@ -329,7 +343,8 @@ const PricingPage: React.FC = () => {
                     <Tag color={
                       config.type === 'openai' ? 'blue' :
                       config.type === 'anthropic' ? 'orange' :
-                      config.type === 'gemini' ? 'green' : 'purple'
+                      config.type === 'gemini' ? 'green' :
+                      config.type === 'kiro' ? 'purple' : 'default'
                     }>
                       {config.type.toUpperCase()}
                     </Tag>
@@ -343,10 +358,21 @@ const PricingPage: React.FC = () => {
           <Form.Item
             label="模型名称"
             name="model_name"
-            rules={[{ required: true, message: '请输入模型名称' }]}
-            extra="请输入该 API 配置支持的模型名称"
+            rules={[{ required: true, message: '请选择模型' }]}
+            extra={selectedApiConfig ? `该配置支持 ${selectedApiConfig.models.length} 个模型` : '请先选择 API 配置'}
           >
-            <Input placeholder="例如: gpt-4, claude-3-opus" disabled={!!editingPricing} />
+            <Select
+              placeholder="选择模型"
+              showSearch
+              disabled={!selectedApiConfigId || !!editingPricing}
+              notFoundContent={!selectedApiConfigId ? '请先选择 API 配置' : '该配置没有可用模型'}
+            >
+              {selectedApiConfig?.models.map((model) => (
+                <Option key={model} value={model}>
+                  {model}
+                </Option>
+              ))}
+            </Select>
           </Form.Item>
 
           <Form.Item
