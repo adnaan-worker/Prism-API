@@ -105,18 +105,42 @@ func Conflict(c *gin.Context, message string, details ...string) {
 }
 
 // InternalError 500 错误
-func InternalError(c *gin.Context, err error) {
+func InternalError(c *gin.Context, err interface{}) {
+	var message string
+	switch v := err.(type) {
+	case error:
+		message = v.Error()
+	case string:
+		message = v
+	default:
+		message = "internal server error"
+	}
+	
 	c.JSON(http.StatusInternalServerError, ErrorResponse{
 		Error: ErrorDetail{
 			Code:    500001,
-			Message: "Internal server error",
-			Details: err.Error(),
+			Message: message,
 		},
 	})
 }
 
 // InternalErrorWithMessage 500 错误（自定义消息）
 func InternalErrorWithMessage(c *gin.Context, message string, err error) {
+	details := ""
+	if err != nil {
+		details = err.Error()
+	}
+	c.JSON(http.StatusInternalServerError, ErrorResponse{
+		Error: ErrorDetail{
+			Code:    500001,
+			Message: message,
+			Details: details,
+		},
+	})
+}
+
+// InternalErrorWithDetails 500 错误（带详情）
+func InternalErrorWithDetails(c *gin.Context, message string, err error) {
 	details := ""
 	if err != nil {
 		details = err.Error()
@@ -138,4 +162,32 @@ func TooManyRequests(c *gin.Context, message string) {
 			Message: message,
 		},
 	})
+}
+
+// RequestTimeout 408 错误
+func RequestTimeout(c *gin.Context, message string) {
+	c.JSON(http.StatusRequestTimeout, ErrorResponse{
+		Error: ErrorDetail{
+			Code:    408001,
+			Message: message,
+		},
+	})
+}
+
+// ValidationError 验证错误
+func ValidationError(c *gin.Context, err error) {
+	c.JSON(http.StatusBadRequest, ErrorResponse{
+		Error: ErrorDetail{
+			Code:    400002,
+			Message: "Validation error",
+			Details: err.Error(),
+		},
+	})
+}
+
+// HandleError 统一错误处理
+func HandleError(c *gin.Context, err error) {
+	// 这里可以根据错误类型进行不同的处理
+	// 暂时统一返回500错误
+	InternalError(c, err.Error())
 }
