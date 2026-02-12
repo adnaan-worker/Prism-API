@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"time"
@@ -15,6 +16,7 @@ type Config struct {
 	JWT       JWTConfig
 	Embedding EmbeddingConfig
 	Cache     CacheConfig
+	Admin     AdminConfig
 }
 
 // DatabaseConfig holds database configuration
@@ -60,8 +62,18 @@ type CacheConfig struct {
 	Threshold     float64
 }
 
+// AdminConfig holds initial admin user configuration
+type AdminConfig struct {
+	Username string
+	Email    string
+	Password string
+}
+
 // Load loads configuration from environment variables
+// It automatically loads .env file if it exists
 func Load() (*Config, error) {
+	// Try to load .env file
+	loadEnvFile()
 	cfg := &Config{
 		Database: DatabaseConfig{
 			URL:             getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/api_aggregator?sslmode=disable"),
@@ -93,6 +105,11 @@ func Load() (*Config, error) {
 			TTL:           getEnvAsDuration("CACHE_TTL", 24*time.Hour),
 			SemanticMatch: getEnvAsBool("CACHE_SEMANTIC_MATCH", true),
 			Threshold:     getEnvAsFloat("CACHE_THRESHOLD", 0.85),
+		},
+		Admin: AdminConfig{
+			Username: getEnv("ADMIN_USERNAME", ""),
+			Email:    getEnv("ADMIN_EMAIL", ""),
+			Password: getEnv("ADMIN_PASSWORD", ""),
 		},
 	}
 
@@ -150,4 +167,100 @@ func getEnvAsFloat(key string, defaultValue float64) float64 {
 		}
 	}
 	return defaultValue
+}
+
+// loadEnvFile loads environment variables from .env file
+func loadEnvFile() {
+	// Try multiple possible locations for .env file
+	envPaths := []string{
+		".env",
+		"../.env",
+		"../../.env",
+	}
+
+	for _, envPath := range envPaths {
+		if err := loadEnvFromFile(envPath); err == nil {
+			log.Printf("Loaded environment variables from %s", envPath)
+			return
+		}
+	}
+}
+
+// loadEnvFromFile loads environment variables from a specific file
+func loadEnvFromFile(filename string) error {
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return err
+	}
+
+	// Simple .env file parser
+	lines := string(data)
+	currentLine := ""
+	for _, char := range lines {
+		if char == '\n' {
+			processEnvLine(currentLine)
+			currentLine = ""
+		} else {
+			currentLine += string(char)
+		}
+	}
+	if currentLine != "" {
+		processEnvLine(currentLine)
+	}
+
+	return nil
+}
+
+// processEnvLine processes a single line from .env file
+func processEnvLine(line string) {
+	// Remove leading/trailing whitespace
+	line = trimSpace(line)
+	
+	// Skip empty lines and comments
+	if line == "" || (len(line) > 0 && line[0] == '#') {
+		return
+	}
+
+	// Find the = sign
+	eqIndex := -1
+	for i, char := range line {
+		if char == '=' {
+			eqIndex = i
+			break
+		}
+	}
+
+	if eqIndex == -1 {
+		return // No = sign found
+	}
+
+	key := trimSpace(line[:eqIndex])
+	value := trimSpace(line[eqIndex+1:])
+
+	// Remove quotes if present
+	if len(value) >= 2 && ((value[0] == '"' && value[len(value)-1] == '"') ||
+		(value[0] == '\'' && value[len(value)-1] == '\'')) {
+		value = value[1 : len(value)-1]
+	}
+
+	// Only set if not already set in environment
+	if os.Getenv(key) == "" {
+		os.Setenv(key, value)
+	}
+}
+
+// trimSpace removes leading and trailing whitespace
+func trimSpace(s string) string {
+	start := 0
+	end := len(s)
+	
+	for start < end && (s[start] == ' ' || s[start] == '\t' || s[start] == '\r') {
+		start++
+	}
+	
+	for end > start && (s[end-1] == ' ' || s[end-1] == '\t' || s[end-1] == '\r') {
+		end--
+	}
+	
+	return s[start:end]
 }

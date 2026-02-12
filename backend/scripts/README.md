@@ -4,7 +4,17 @@ This directory contains database migration and management scripts for the Prism 
 
 ## Quick Start
 
+<<<<<<< Updated upstream
 ### 1. Run Database Migration
+=======
+- `migrate.go` - Go-based migration script using GORM AutoMigrate
+- `init_admin.go` - Script to create or update admin user
+- `schema.sql` - SQL schema file for manual execution or reference
+
+## Running Migrations
+
+### Using Go Script (Recommended)
+>>>>>>> Stashed changes
 
 ```bash
 # Set database connection (optional, defaults to localhost)
@@ -55,6 +65,40 @@ go run create_admin.go
 - **`migrate_test.go`** - Unit tests for migration functions
 - **`setup_test_db.sh`** - Shell script to setup test database (Linux/Mac)
 - **`setup_test_db.bat`** - Batch script to setup test database (Windows)
+
+## Initializing Admin User
+
+### Using Go Script (Recommended)
+
+```bash
+# Make sure DATABASE_URL is set (or it will use .env file)
+cd backend/scripts
+go run init_admin.go
+```
+
+The script will:
+- Read admin credentials from `.env` file or environment variables
+- Create admin user if it doesn't exist
+- Update password if admin user already exists (with confirmation)
+
+### Custom Admin Credentials
+
+You can override the default credentials using environment variables:
+
+```bash
+export ADMIN_USERNAME=myadmin
+export ADMIN_EMAIL=myadmin@example.com
+export ADMIN_PASSWORD=mypassword123
+cd backend/scripts
+go run init_admin.go
+```
+
+### Default Credentials
+
+If not specified, the script uses:
+- Username: `admin`
+- Email: `admin@example.com`
+- Password: `admin123`
 
 ## Database Schema
 

@@ -149,9 +149,25 @@ cp .env.example .env
 docker-compose up -d
 ```
 
-4. **访问应用**
+4. **初始化管理员账户**（首次部署时必需）
+```bash
+# 进入后端容器
+docker-compose exec backend bash
+
+# 运行初始化脚本
+cd scripts
+go run init_admin.go
+```
+
+或者直接在宿主机运行：
+```bash
+cd backend/scripts
+go run init_admin.go
+```
+
+5. **访问应用**
 - 用户门户：http://localhost:3000
-- 管理面板：http://localhost:3001
+- 管理面板：http://localhost:3001（需要管理员账户登录）
 - 后端 API：http://localhost:8080/api
 
 ### 本地开发
@@ -176,11 +192,45 @@ docker-compose up -d postgres redis
 # 运行数据库迁移
 go run scripts/migrate.go
 
+# 初始化管理员账户（首次部署时必需）
+go run scripts/init_admin.go
+
 # 启动服务器
 go run cmd/server/main.go
 ```
 
 后端将运行在 http://localhost:8080
+
+#### 初始化管理员账户
+
+首次部署时，需要创建管理员账户才能访问管理面板：
+
+```bash
+cd backend/scripts
+
+# 使用默认配置创建管理员（从 .env 文件读取）
+go run init_admin.go
+
+# 使用自定义凭据创建管理员
+export ADMIN_USERNAME=myadmin
+export ADMIN_EMAIL=myadmin@example.com
+export ADMIN_PASSWORD=mypassword123
+go run init_admin.go
+
+# 强制更新已存在的管理员密码（非交互模式）
+go run init_admin.go --force
+```
+
+**默认管理员凭据**（如果未配置）：
+- 用户名：`admin`
+- 邮箱：`admin@example.com`
+- 密码：`admin123`
+
+**注意**：
+- 脚本会自动检查数据库表是否存在，如果不存在会自动运行迁移
+- 如果管理员账户已存在，脚本会询问是否更新密码
+- 使用 `--force` 标志可以在非交互模式下强制更新密码
+- 生产环境建议使用强密码并修改默认凭据
 
 #### 启动用户门户
 
@@ -244,10 +294,38 @@ SERVER_WRITE_TIMEOUT=10s
 REQUEST_TIMEOUT=30s
 
 # 初始管理员账户（可选）
+# 配置后运行 go run backend/scripts/init_admin.go 创建管理员账户
 ADMIN_USERNAME=admin
 ADMIN_EMAIL=admin@example.com
 ADMIN_PASSWORD=admin123
 ```
+
+### 初始化管理员账户
+
+首次部署时，需要创建管理员账户才能访问管理面板。有两种方式：
+
+#### 方式 1：使用初始化脚本（推荐）
+
+```bash
+cd backend/scripts
+go run init_admin.go
+```
+
+脚本会：
+- 自动从 `.env` 文件读取管理员配置
+- 检查数据库表是否存在，不存在则自动运行迁移
+- 如果管理员已存在，询问是否更新密码
+- 创建或更新管理员账户
+
+#### 方式 2：服务器启动时自动创建
+
+服务器启动时会自动检查并创建管理员账户（如果配置了且账户不存在）。这种方式适合开发环境。
+
+**生产环境建议**：
+- 使用初始化脚本手动创建管理员账户
+- 使用强密码（至少 12 位，包含大小写字母、数字和特殊字符）
+- 修改默认的管理员用户名和邮箱
+- 不要在代码仓库中提交包含真实密码的 `.env` 文件
 
 ## 🧪 测试
 
