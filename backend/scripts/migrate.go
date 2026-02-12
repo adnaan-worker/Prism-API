@@ -37,6 +37,9 @@ func main() {
 		&models.LoadBalancerConfig{},
 		&models.RequestLog{},
 		&models.SignInRecord{},
+		&models.Pricing{},
+		&models.BillingTransaction{},
+		&models.RequestCache{},
 	)
 	if err != nil {
 		log.Fatalf("Failed to run migrations: %v", err)

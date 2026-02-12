@@ -21,7 +21,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py .
 
 # 预下载模型（可选，加快首次启动）
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+# 注释掉以避免构建时的网络问题，模型将在首次运行时自动下载
+# RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
 
 # 暴露端口
 EXPOSE 8765
