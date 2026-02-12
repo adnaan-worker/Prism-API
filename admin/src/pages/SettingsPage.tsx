@@ -47,9 +47,10 @@ import {
   type DefaultQuotaConfig,
   type DefaultRateLimitConfig,
 } from '../services/settingsService';
+import PageContainer from '../components/PageContainer';
 import { formatNumber } from '../utils/format';
 
-const { Title, Paragraph, Text } = Typography;
+const { Paragraph, Text } = Typography;
 
 // ============================
 // 子组件：运行时配置（第一优先级）
@@ -880,11 +881,9 @@ const SettingsPage: React.FC = () => {
   ];
 
   return (
-    <div>
-      <Title level={3}>系统设置</Title>
-      <Paragraph type="secondary">运行时配置、缓存管理与安全设置</Paragraph>
+    <PageContainer title="系统设置" description="运行时配置、缓存管理与安全设置">
       <Tabs defaultActiveKey="runtime" items={tabItems} size="large" />
-    </div>
+    </PageContainer>
   );
 };
 

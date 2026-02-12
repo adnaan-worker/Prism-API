@@ -44,6 +44,7 @@ import type { ColumnsType } from 'antd/es/table';
 import TableToolbar from '../components/TableToolbar';
 import ProviderTag from '../components/ProviderTag';
 import AccountPoolManager from '../components/AccountPoolManager';
+import PageContainer from '../components/PageContainer';
 import { useTable } from '../hooks/useTable';
 import { useModal } from '../hooks/useModal';
 import { formatDateTime } from '../utils/format';
@@ -567,7 +568,7 @@ const ApiConfigsPage: React.FC = () => {
   };
 
   return (
-    <div>
+    <PageContainer title="API 配置" description="管理 AI 服务提供商的接入配置">
       <Card>
         {/* 操作栏 */}
         <TableToolbar
@@ -917,7 +918,7 @@ const ApiConfigsPage: React.FC = () => {
           }}
         />
       )}
-    </div>
+    </PageContainer>
   );
 };
 

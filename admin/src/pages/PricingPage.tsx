@@ -15,6 +15,7 @@ import {
   Select,
   Tooltip,
 } from 'antd';
+import PageContainer from '../components/PageContainer';
 import {
   PlusOutlined,
   EditOutlined,
@@ -272,7 +273,7 @@ const PricingPage: React.FC = () => {
     : data?.pricings;
 
   return (
-    <div>
+    <PageContainer title="定价管理" description="配置各模型的计费规则">
       <Card>
         {/* 操作栏 */}
         <Space style={{ marginBottom: 16 }} wrap>
@@ -430,7 +431,7 @@ const PricingPage: React.FC = () => {
           </Form.Item>
         </Form>
       </Modal>
-    </div>
+    </PageContainer>
   );
 };
 

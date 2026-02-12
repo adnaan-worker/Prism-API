@@ -8,6 +8,7 @@ import LoadBalancerPage from '../pages/LoadBalancerPage';
 import PricingPage from '../pages/PricingPage';
 import LogsPage from '../pages/LogsPage';
 import SettingsPage from '../pages/SettingsPage';
+import NotFoundPage from '../pages/NotFoundPage';
 import ProtectedRoute from '../components/ProtectedRoute';
 
 export const router = createBrowserRouter([
@@ -56,5 +57,9 @@ export const router = createBrowserRouter([
         element: <SettingsPage />,
       },
     ],
+  },
+  {
+    path: '*',
+    element: <NotFoundPage />,
   },
 ]);

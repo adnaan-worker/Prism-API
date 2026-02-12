@@ -23,6 +23,7 @@ import { logService } from '../services/logService';
 import type { RequestLog } from '../types';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { Dayjs } from 'dayjs';
+import PageContainer from '../components/PageContainer';
 
 const { RangePicker } = DatePicker;
 const { Option } = Select;
@@ -220,7 +221,7 @@ const LogsPage: React.FC = () => {
   };
 
   return (
-    <div>
+    <PageContainer title="请求日志" description="查看和分析 API 请求记录">
       <Card>
         {/* 筛选栏 */}
         <Space style={{ marginBottom: 16 }} wrap>
@@ -379,7 +380,7 @@ const LogsPage: React.FC = () => {
           </Descriptions>
         )}
       </Drawer>
-    </div>
+    </PageContainer>
   );
 };
 
