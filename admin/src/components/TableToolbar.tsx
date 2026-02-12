@@ -24,7 +24,7 @@ const TableToolbar: React.FC<TableToolbarProps> = ({
   extra,
 }) => {
   return (
-    <Space style={{ marginBottom: 16 }} wrap>
+    <Space  wrap>
       {showAdd && onAdd && (
         <Button type="primary" icon={<PlusOutlined />} onClick={onAdd}>
           {addText}

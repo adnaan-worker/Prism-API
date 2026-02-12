@@ -571,12 +571,12 @@ const ApiConfigsPage: React.FC = () => {
     <PageContainer title="API 配置" description="管理 AI 服务提供商的接入配置">
       <Card>
         {/* 操作栏 */}
-        <TableToolbar
+        <Space style={{ marginBottom: 16 }} wrap><TableToolbar
           onAdd={handleAdd}
           addText="添加配置"
           onRefresh={() => refetch()}
           extra={
-            <>
+            <Space wrap>
               <Button
                 danger
                 icon={<DeleteOutlined />}
@@ -600,9 +600,10 @@ const ApiConfigsPage: React.FC = () => {
                 <Option value="kiro">Kiro</Option>
                 <Option value="custom">Custom</Option>
               </Select>
-            </>
+            </Space>
           }
-        />
+        /></Space>
+        
 
         {/* 配置列表表格 */}
         <Table
