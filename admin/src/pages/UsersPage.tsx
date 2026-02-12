@@ -27,6 +27,7 @@ import type { User } from '../types';
 import type { ColumnsType } from 'antd/es/table';
 import TableToolbar from '../components/TableToolbar';
 import StatusTag from '../components/StatusTag';
+import PageContainer from '../components/PageContainer';
 import { useTable } from '../hooks/useTable';
 import { useModal } from '../hooks/useModal';
 import { formatNumber, formatDateTime, formatPercent } from '../utils/format';
@@ -249,7 +250,7 @@ const UsersPage: React.FC = () => {
   };
 
   return (
-    <div>
+    <PageContainer title="用户管理" description="管理平台用户、配额和权限">
       <Card>
         {/* 搜索和筛选栏 */}
         <Space style={{ marginBottom: 16 }} wrap>
@@ -400,7 +401,7 @@ const UsersPage: React.FC = () => {
           )}
         </Form>
       </Modal>
-    </div>
+    </PageContainer>
   );
 };
 

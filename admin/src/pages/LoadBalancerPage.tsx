@@ -27,6 +27,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { loadBalancerService } from '../services/loadBalancerService';
 import type { ModelEndpoint, LoadBalancerConfig } from '../services/loadBalancerService';
 import type { ColumnsType } from 'antd/es/table';
+import PageContainer from '../components/PageContainer';
 
 const { Option } = Select;
 
@@ -234,7 +235,7 @@ const LoadBalancerPage: React.FC = () => {
   };
 
   return (
-    <div>
+    <PageContainer title="负载均衡" description="管理模型端点分配和均衡策略">
       {/* 模型选择和配置 */}
       <Card style={{ marginBottom: 16 }}>
         <Space size="large" wrap>
@@ -397,7 +398,7 @@ const LoadBalancerPage: React.FC = () => {
           </Form.Item>
         </Form>
       </Modal>
-    </div>
+    </PageContainer>
   );
 };
 

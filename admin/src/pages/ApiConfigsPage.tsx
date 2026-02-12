@@ -44,6 +44,7 @@ import type { ColumnsType } from 'antd/es/table';
 import TableToolbar from '../components/TableToolbar';
 import ProviderTag from '../components/ProviderTag';
 import AccountPoolManager from '../components/AccountPoolManager';
+import PageContainer from '../components/PageContainer';
 import { useTable } from '../hooks/useTable';
 import { useModal } from '../hooks/useModal';
 import { formatDateTime } from '../utils/format';
@@ -567,15 +568,15 @@ const ApiConfigsPage: React.FC = () => {
   };
 
   return (
-    <div>
+    <PageContainer title="API 配置" description="管理 AI 服务提供商的接入配置">
       <Card>
         {/* 操作栏 */}
-        <TableToolbar
+        <Space style={{ marginBottom: 16 }} wrap><TableToolbar
           onAdd={handleAdd}
           addText="添加配置"
           onRefresh={() => refetch()}
           extra={
-            <>
+            <Space wrap>
               <Button
                 danger
                 icon={<DeleteOutlined />}
@@ -599,9 +600,10 @@ const ApiConfigsPage: React.FC = () => {
                 <Option value="kiro">Kiro</Option>
                 <Option value="custom">Custom</Option>
               </Select>
-            </>
+            </Space>
           }
-        />
+        /></Space>
+        
 
         {/* 配置列表表格 */}
         <Table
@@ -917,7 +919,7 @@ const ApiConfigsPage: React.FC = () => {
           }}
         />
       )}
-    </div>
+    </PageContainer>
   );
 };
 
