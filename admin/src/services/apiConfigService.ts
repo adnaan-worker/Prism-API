@@ -77,7 +77,7 @@ export const apiConfigService = {
 
   // 批量删除API配置
   batchDeleteConfigs: async (ids: number[]): Promise<void> => {
-    await apiClient.post('/admin/api-configs/batch-delete', { ids });
+    await apiClient.post('/admin/api-configs/batch/delete', { ids });
   },
 
   // 从提供商获取模型列表

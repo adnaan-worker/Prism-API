@@ -11,9 +11,9 @@ export const cacheService = {
   getCacheStats: () => apiClient.get<CacheStats>('/admin/cache/stats'),
 
   // 清理过期缓存（管理员）
-  cleanExpiredCache: () => apiClient.post('/admin/cache/clean'),
+  cleanExpiredCache: () => apiClient.delete('/admin/cache/clean'),
 
   // 清除用户缓存（管理员）
   clearUserCache: (userId: number) =>
-    apiClient.delete(`/admin/cache/users/${userId}`),
+    apiClient.delete(`/admin/cache/user/${userId}`),
 };

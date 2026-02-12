@@ -4,7 +4,7 @@ import { QuotaInfo, SignInResponse, UsageHistoryItem } from '../types';
 export const quotaService = {
   // Get quota information
   async getQuotaInfo(): Promise<QuotaInfo> {
-    const response = await apiClient.get<QuotaInfo>('/user/info');
+    const response = await apiClient.get<QuotaInfo>('/user/quota');
     return response.data;
   },
 
