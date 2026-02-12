@@ -93,6 +93,10 @@ const AdminLayout: React.FC = () => {
     if (key === 'logout') {
       localStorage.removeItem('admin_token');
       navigate('/login');
+    } else if (key === 'settings') {
+      navigate('/settings');
+    } else if (key === 'profile') {
+      navigate('/settings');
     }
   };
 
