@@ -484,6 +484,11 @@ func insertDefaultSettings(db *gorm.DB) {
 			-- 运行时配置
 			('runtime.cache_enabled', 'true', 'bool', 'Enable request caching', true, NOW(), NOW()),
 			('runtime.cache_ttl', '3600', 'int', 'Cache TTL in seconds', true, NOW(), NOW()),
+			('runtime.semantic_cache_enabled', 'false', 'bool', 'Enable semantic cache matching', true, NOW(), NOW()),
+			('runtime.semantic_threshold', '0.85', 'float', 'Semantic matching threshold (0.0-1.0)', true, NOW(), NOW()),
+			('runtime.embedding_enabled', 'false', 'bool', 'Enable embedding service', true, NOW(), NOW()),
+			('runtime.embedding_url', 'http://localhost:8765', 'string', 'Embedding service URL', true, NOW(), NOW()),
+			('runtime.embedding_timeout', '30', 'int', 'Embedding service timeout in seconds', true, NOW(), NOW()),
 			('runtime.max_retries', '3', 'int', 'Maximum retry attempts', true, NOW(), NOW()),
 			('runtime.timeout', '30', 'int', 'Request timeout in seconds', true, NOW(), NOW()),
 			('runtime.enable_load_balance', 'true', 'bool', 'Enable load balancing', true, NOW(), NOW()),
@@ -495,13 +500,13 @@ func insertDefaultSettings(db *gorm.DB) {
 			('system.maintenance_mode', 'false', 'bool', 'Maintenance mode', false, NOW(), NOW()),
 			
 			-- 默认配额
-			('default_quota.daily', '1000', 'int', 'Default daily quota', false, NOW(), NOW()),
-			('default_quota.monthly', '30000', 'int', 'Default monthly quota', false, NOW(), NOW()),
-			('default_quota.total', '0', 'int', 'Default total quota (0 = unlimited)', false, NOW(), NOW()),
+			('default_quota.daily', '100000', 'int', 'Default user quota', false, NOW(), NOW()),
+			('default_quota.monthly', '30000', 'int', 'Default monthly quota (deprecated)', false, NOW(), NOW()),
+			('default_quota.total', '0', 'int', 'Default total quota (deprecated)', false, NOW(), NOW()),
 			
 			-- 默认速率限制
 			('default_rate_limit.per_minute', '60', 'int', 'Default rate limit per minute', false, NOW(), NOW()),
-			('default_rate_limit.per_hour', '1000', 'int', 'Default rate limit per hour', false, NOW(), NOW()),
+			('default_rate_limit.per_hour', '1000', 'int', 'Default rate limit per hour (deprecated)', false, NOW(), NOW()),
 			('default_rate_limit.per_day', '10000', 'int', 'Default rate limit per day', false, NOW(), NOW())
 		ON CONFLICT ("key") DO NOTHING
 	`).Error

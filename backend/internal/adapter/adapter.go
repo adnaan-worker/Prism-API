@@ -42,19 +42,66 @@ type ToolFunction struct {
 
 // ChatRequest represents a unified chat completion request
 type ChatRequest struct {
-	Model            string      `json:"model"`
-	Messages         []Message   `json:"messages"`
-	Temperature      float64     `json:"temperature,omitempty"`
-	TopP             float64     `json:"top_p,omitempty"`
-	TopK             int         `json:"top_k,omitempty"`
-	MaxTokens        int         `json:"max_tokens,omitempty"`
-	Stream           bool        `json:"stream,omitempty"`
-	Stop             interface{} `json:"stop,omitempty"` // string or []string
-	N                int         `json:"n,omitempty"`
-	PresencePenalty  float64     `json:"presence_penalty,omitempty"`
-	FrequencyPenalty float64     `json:"frequency_penalty,omitempty"`
-	Tools            []Tool      `json:"tools,omitempty"`
-	ToolChoice       interface{} `json:"tool_choice,omitempty"`
+	// 基础参数
+	Model    string    `json:"model"`
+	Messages []Message `json:"messages"`
+
+	// 采样参数
+	Temperature float64 `json:"temperature,omitempty"`
+	TopP        float64 `json:"top_p,omitempty"`
+	TopK        int     `json:"top_k,omitempty"`
+
+	// 输出控制
+	MaxTokens int         `json:"max_tokens,omitempty"`
+	Stop      interface{} `json:"stop,omitempty"` // string or []string
+	N         int         `json:"n,omitempty"`
+
+	// 惩罚参数
+	PresencePenalty  float64 `json:"presence_penalty,omitempty"`
+	FrequencyPenalty float64 `json:"frequency_penalty,omitempty"`
+
+	// 工具调用
+	Tools      []Tool      `json:"tools,omitempty"`
+	ToolChoice interface{} `json:"tool_choice,omitempty"`
+
+	// 流式输出
+	Stream bool `json:"stream,omitempty"`
+
+	// OpenAI 特有参数
+	User              string         `json:"user,omitempty"`
+	Seed              *int           `json:"seed,omitempty"`
+	LogitBias         map[string]int `json:"logit_bias,omitempty"`
+	Logprobs          bool           `json:"logprobs,omitempty"`
+	TopLogprobs       int            `json:"top_logprobs,omitempty"`
+	ResponseFormat    *ResponseFormat `json:"response_format,omitempty"`
+	ServiceTier       string         `json:"service_tier,omitempty"`
+	ParallelToolCalls *bool          `json:"parallel_tool_calls,omitempty"`
+	StreamOptions     *StreamOptions `json:"stream_options,omitempty"`
+
+	// Anthropic 特有参数
+	Metadata      map[string]interface{} `json:"metadata,omitempty"`
+	StopSequences []string               `json:"stop_sequences,omitempty"`
+
+	// Gemini 特有参数
+	SafetySettings []SafetySetting `json:"safety_settings,omitempty"`
+	CachedContent  string          `json:"cached_content,omitempty"`
+}
+
+// ResponseFormat 响应格式配置
+type ResponseFormat struct {
+	Type       string      `json:"type"` // "text" or "json_object" or "json_schema"
+	JSONSchema interface{} `json:"json_schema,omitempty"`
+}
+
+// StreamOptions 流式选项
+type StreamOptions struct {
+	IncludeUsage bool `json:"include_usage,omitempty"`
+}
+
+// SafetySetting Gemini 安全设置
+type SafetySetting struct {
+	Category  string `json:"category"`
+	Threshold string `json:"threshold"`
 }
 
 // ChatResponse represents a unified chat completion response

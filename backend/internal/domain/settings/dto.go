@@ -4,28 +4,38 @@ import "time"
 
 // RuntimeConfigResponse 运行时配置响应
 type RuntimeConfigResponse struct {
-	CacheEnabled      bool `json:"cache_enabled"`
-	CacheTTL          int  `json:"cache_ttl"`           // 秒
-	MaxRetries        int  `json:"max_retries"`
-	Timeout           int  `json:"timeout"`             // 秒
-	EnableLoadBalance bool `json:"enable_load_balance"`
+	CacheEnabled         bool    `json:"cache_enabled"`
+	CacheTTL             string  `json:"cache_ttl"`              // 格式: "24h", "1h30m"
+	SemanticCacheEnabled bool    `json:"semantic_cache_enabled"`
+	SemanticThreshold    float64 `json:"semantic_threshold"`     // 0.0 ~ 1.0
+	EmbeddingEnabled     bool    `json:"embedding_enabled"`
 }
 
 // UpdateRuntimeConfigRequest 更新运行时配置请求
 type UpdateRuntimeConfigRequest struct {
-	CacheEnabled      *bool `json:"cache_enabled"`
-	CacheTTL          *int  `json:"cache_ttl"`
-	MaxRetries        *int  `json:"max_retries"`
-	Timeout           *int  `json:"timeout"`
-	EnableLoadBalance *bool `json:"enable_load_balance"`
+	CacheEnabled         *bool    `json:"cache_enabled"`
+	CacheTTL             *string  `json:"cache_ttl"`
+	SemanticCacheEnabled *bool    `json:"semantic_cache_enabled"`
+	SemanticThreshold    *float64 `json:"semantic_threshold"`
+	EmbeddingEnabled     *bool    `json:"embedding_enabled"`
 }
 
-// SystemConfigResponse 系统配置响应
+// SystemConfigResponse 系统运行信息响应
 type SystemConfigResponse struct {
-	SiteName        string `json:"site_name"`
-	SiteDescription string `json:"site_description"`
-	AdminEmail      string `json:"admin_email"`
-	MaintenanceMode bool   `json:"maintenance_mode"`
+	// 缓存配置
+	CacheEnabled         bool    `json:"cache_enabled"`
+	CacheTTL             string  `json:"cache_ttl"`
+	SemanticCacheEnabled bool    `json:"semantic_cache_enabled"`
+	SemanticThreshold    float64 `json:"semantic_threshold"`
+	EmbeddingEnabled     bool    `json:"embedding_enabled"`
+	// 速率限制
+	RateLimitEnabled  bool   `json:"rate_limit_enabled"`
+	RateLimitRequests int    `json:"rate_limit_requests"`
+	RateLimitWindow   string `json:"rate_limit_window"`
+	// 服务信息
+	Version   string `json:"version"`
+	Uptime    string `json:"uptime"`
+	GoVersion string `json:"go_version"`
 }
 
 // UpdatePasswordRequest 修改密码请求
@@ -36,30 +46,24 @@ type UpdatePasswordRequest struct {
 
 // DefaultQuotaResponse 默认配额响应
 type DefaultQuotaResponse struct {
-	Daily   int64 `json:"daily"`
-	Monthly int64 `json:"monthly"`
-	Total   int64 `json:"total"`
+	DefaultQuota int64 `json:"default_quota"`
 }
 
 // UpdateDefaultQuotaRequest 更新默认配额请求
 type UpdateDefaultQuotaRequest struct {
-	Daily   *int64 `json:"daily"`
-	Monthly *int64 `json:"monthly"`
-	Total   *int64 `json:"total"`
+	DefaultQuota *int64 `json:"default_quota"`
 }
 
 // DefaultRateLimitResponse 默认速率限制响应
 type DefaultRateLimitResponse struct {
-	PerMinute int `json:"per_minute"`
-	PerHour   int `json:"per_hour"`
-	PerDay    int `json:"per_day"`
+	RequestsPerMinute int `json:"requests_per_minute"`
+	RequestsPerDay    int `json:"requests_per_day"`
 }
 
 // UpdateDefaultRateLimitRequest 更新默认速率限制请求
 type UpdateDefaultRateLimitRequest struct {
-	PerMinute *int `json:"per_minute"`
-	PerHour   *int `json:"per_hour"`
-	PerDay    *int `json:"per_day"`
+	RequestsPerMinute *int `json:"requests_per_minute"`
+	RequestsPerDay    *int `json:"requests_per_day"`
 }
 
 // SettingResponse 设置响应

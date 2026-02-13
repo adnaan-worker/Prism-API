@@ -35,11 +35,16 @@ func (Setting) TableName() string {
 // 设置键常量
 const (
 	// 运行时配置
-	KeyRuntimeCacheEnabled      = "runtime.cache_enabled"
-	KeyRuntimeCacheTTL          = "runtime.cache_ttl"
-	KeyRuntimeMaxRetries        = "runtime.max_retries"
-	KeyRuntimeTimeout           = "runtime.timeout"
-	KeyRuntimeEnableLoadBalance = "runtime.enable_load_balance"
+	KeyRuntimeCacheEnabled         = "runtime.cache_enabled"
+	KeyRuntimeCacheTTL             = "runtime.cache_ttl"
+	KeyRuntimeSemanticCacheEnabled = "runtime.semantic_cache_enabled"
+	KeyRuntimeSemanticThreshold    = "runtime.semantic_threshold"
+	KeyRuntimeEmbeddingEnabled     = "runtime.embedding_enabled"
+	KeyRuntimeEmbeddingURL         = "runtime.embedding_url"
+	KeyRuntimeEmbeddingTimeout     = "runtime.embedding_timeout"
+	KeyRuntimeMaxRetries           = "runtime.max_retries"
+	KeyRuntimeTimeout              = "runtime.timeout"
+	KeyRuntimeEnableLoadBalance    = "runtime.enable_load_balance"
 
 	// 系统配置
 	KeySystemSiteName        = "system.site_name"

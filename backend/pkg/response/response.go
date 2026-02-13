@@ -195,3 +195,42 @@ func HandleError(c *gin.Context, err error) {
 	// 暂时统一返回500错误
 	InternalError(c, err.Error())
 }
+
+// Error 通用错误响应
+func Error(c *gin.Context, statusCode int, code int, message string, err error) {
+	details := ""
+	if err != nil {
+		details = err.Error()
+	}
+	c.JSON(statusCode, ErrorResponse{
+		Error: ErrorDetail{
+			Code:    code,
+			Message: message,
+			Details: details,
+		},
+	})
+}
+
+// ErrorFromError 从自定义错误创建响应
+func ErrorFromError(c *gin.Context, err error) {
+	// 尝试转换为 AppError
+	type appError interface {
+		Error() string
+		GetCode() int
+		GetMessage() string
+	}
+	
+	if appErr, ok := err.(appError); ok {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error: ErrorDetail{
+				Code:    appErr.GetCode(),
+				Message: appErr.GetMessage(),
+				Details: appErr.Error(),
+			},
+		})
+		return
+	}
+	
+	// 默认处理
+	InternalError(c, err)
+}

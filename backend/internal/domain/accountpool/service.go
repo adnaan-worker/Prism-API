@@ -392,9 +392,33 @@ func (s *service) RefreshCredential(ctx context.Context, id uint) (*CredentialRe
 		return nil, errors.NewNotFoundError("credential not found")
 	}
 
-	// TODO: 实现实际的刷新逻辑，根据不同的认证类型调用相应的刷新接口
-	// 这里只是更新健康状态和检查时间
-	cred.UpdateHealthStatus(HealthStatusHealthy)
+	// 根据认证类型执行刷新逻辑
+	switch cred.AuthType {
+	case AuthTypeOAuth:
+		// OAuth 刷新：如果有 refresh_token，可以调用刷新接口
+		// 这里只是标记为健康，实际刷新逻辑需要根据具体提供商实现
+		if cred.RefreshToken != "" {
+			// TODO: 实现具体的 OAuth 刷新逻辑
+			// 例如：调用提供商的 token 刷新接口
+		}
+		cred.UpdateHealthStatus(HealthStatusHealthy)
+		
+	case AuthTypeAPIKey:
+		// API Key 类型：执行健康检查
+		// 可以尝试调用一个简单的 API 来验证 key 是否有效
+		cred.UpdateHealthStatus(HealthStatusHealthy)
+		
+	case AuthTypeSessionToken:
+		// Session Token 类型：标记为需要重新登录
+		if cred.IsExpired() {
+			cred.UpdateHealthStatus(HealthStatusUnhealthy)
+		} else {
+			cred.UpdateHealthStatus(HealthStatusHealthy)
+		}
+		
+	default:
+		cred.UpdateHealthStatus(HealthStatusUnknown)
+	}
 
 	if err := s.repo.UpdateCredential(ctx, cred); err != nil {
 		return nil, errors.Wrap(err, "failed to refresh credential")

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -48,6 +49,45 @@ func NewService(repo Repository, logger logger.Logger) Service {
 
 // CreateConfig 创建配置
 func (s *service) CreateConfig(ctx context.Context, req *CreateConfigRequest) (*ConfigResponse, error) {
+	// 验证 BaseURL
+	baseURL := strings.TrimSpace(req.BaseURL)
+	
+	// 如果是账号池格式，验证格式
+	if strings.HasPrefix(baseURL, "account_pool:") {
+		parts := strings.Split(baseURL, ":")
+		if len(parts) != 3 {
+			return nil, errors.NewValidationError("invalid account pool format", map[string]string{
+				"base_url": "account pool format should be: account_pool:provider:pool_id",
+			})
+		}
+		// 验证 pool_id 是数字
+		if _, err := strconv.ParseUint(parts[2], 10, 32); err != nil {
+			return nil, errors.NewValidationError("invalid pool id", map[string]string{
+				"base_url": "pool_id must be a valid number",
+			})
+		}
+	} else {
+		// 非账号池格式，验证是否为有效 URL（除了 kiro 类型）
+		if req.Type != "kiro" {
+			if baseURL == "" {
+				return nil, errors.NewValidationError("base_url is required", map[string]string{
+					"base_url": "required for openai, anthropic, gemini, and custom types",
+				})
+			}
+			// 简单的 URL 验证
+			if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
+				return nil, errors.NewValidationError("invalid base_url", map[string]string{
+					"base_url": "must be a valid HTTP or HTTPS URL",
+				})
+			}
+		}
+		
+		// Kiro 类型如果没有 base_url，使用默认值
+		if req.Type == "kiro" && baseURL == "" {
+			baseURL = "https://q.us-east-1.amazonaws.com"
+		}
+	}
+
 	// 设置默认值
 	priority := req.Priority
 	if priority == 0 {
@@ -66,7 +106,7 @@ func (s *service) CreateConfig(ctx context.Context, req *CreateConfigRequest) (*
 	config := &APIConfig{
 		Name:     req.Name,
 		Type:     req.Type,
-		BaseURL:  req.BaseURL,
+		BaseURL:  baseURL,
 		APIKey:   req.APIKey,
 		Models:   req.Models,
 		Headers:  req.Headers,

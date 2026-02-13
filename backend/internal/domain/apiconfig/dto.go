@@ -6,7 +6,7 @@ import "time"
 type CreateConfigRequest struct {
 	Name     string                 `json:"name" binding:"required,min=1,max=255"`
 	Type     string                 `json:"type" binding:"required,oneof=openai anthropic gemini kiro custom"`
-	BaseURL  string                 `json:"base_url" binding:"required,url"`
+	BaseURL  string                 `json:"base_url"` // 移除验证，在 Service 层处理
 	APIKey   string                 `json:"api_key" binding:"omitempty"`
 	Models   []string               `json:"models" binding:"required,min=1"`
 	Headers  map[string]interface{} `json:"headers" binding:"omitempty"`

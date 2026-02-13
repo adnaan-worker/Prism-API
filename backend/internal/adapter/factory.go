@@ -1,13 +1,20 @@
 package adapter
 
 import (
-	"api-aggregator/backend/internal/models"
 	"context"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 )
+
+// APIConfigInterface 定义 API 配置接口（避免循环依赖）
+type APIConfigInterface interface {
+	GetType() string
+	GetBaseURL() string
+	GetAPIKey() string
+	GetTimeout() int
+}
 
 // PoolManagerInterface 定义池管理器接口（避免循环依赖）
 type PoolManagerInterface interface {
@@ -32,22 +39,24 @@ func (f *Factory) SetPoolManager(poolManager PoolManagerInterface) {
 }
 
 // CreateAdapter creates an adapter based on the API configuration
-func (f *Factory) CreateAdapter(config *models.APIConfig) (Adapter, error) {
+func (f *Factory) CreateAdapter(config APIConfigInterface) (Adapter, error) {
 	// Check if this is an account pool configuration
-	// Format: "account_pool:kiro:123" where 123 is the pool ID
-	if strings.HasPrefix(config.Type, "account_pool:") {
+	// Format: base_url = "account_pool:kiro:123" where 123 is the pool ID
+	baseURL := config.GetBaseURL()
+	if strings.HasPrefix(baseURL, "account_pool:") {
 		return f.createAccountPoolAdapter(config)
 	}
 
 	// Regular adapter creation
 	adapterConfig := &Config{
-		BaseURL: config.BaseURL,
-		APIKey:  config.APIKey,
+		BaseURL: baseURL,
+		APIKey:  config.GetAPIKey(),
 		Model:   "", // Model will be set per request
-		Timeout: config.Timeout,
+		Timeout: config.GetTimeout(),
 	}
 
-	switch config.Type {
+	configType := config.GetType()
+	switch configType {
 	case "openai":
 		return NewOpenAIAdapter(adapterConfig), nil
 	case "anthropic":
@@ -55,29 +64,28 @@ func (f *Factory) CreateAdapter(config *models.APIConfig) (Adapter, error) {
 	case "gemini":
 		return NewGeminiAdapter(adapterConfig), nil
 	case "kiro":
-		// Kiro adapter requires account pool
-		// If Type is just "kiro", it should use account pool
-		// This is a fallback - normally should use "account_pool:kiro:X" format
-		return nil, fmt.Errorf("kiro adapter requires account pool configuration. Use type 'account_pool:kiro:pool_id'")
+		// Kiro 应该使用账号池，如果直接配置则返回错误
+		return nil, fmt.Errorf("kiro adapter requires account pool configuration. Use base_url format: 'account_pool:kiro:pool_id'")
 	case "custom":
 		// For custom type, default to OpenAI-compatible format
 		return NewOpenAIAdapter(adapterConfig), nil
 	default:
-		return nil, fmt.Errorf("unsupported adapter type: %s", config.Type)
+		return nil, fmt.Errorf("unsupported adapter type: %s", configType)
 	}
 }
 
 // createAccountPoolAdapter creates an account pool adapter
-// Expected format: "account_pool:kiro:123" or "account_pool:gemini:456"
-func (f *Factory) createAccountPoolAdapter(config *models.APIConfig) (Adapter, error) {
+// Expected format in base_url: "account_pool:kiro:123" or "account_pool:gemini:456"
+func (f *Factory) createAccountPoolAdapter(config APIConfigInterface) (Adapter, error) {
 	if f.poolManager == nil {
 		return nil, fmt.Errorf("account pool feature is not enabled")
 	}
 
-	// Parse the type string
-	parts := strings.Split(config.Type, ":")
+	// Parse the base_url string
+	baseURL := config.GetBaseURL()
+	parts := strings.Split(baseURL, ":")
 	if len(parts) != 3 {
-		return nil, fmt.Errorf("invalid account pool type format: %s (expected: account_pool:provider:pool_id)", config.Type)
+		return nil, fmt.Errorf("invalid account pool base_url format: %s (expected: account_pool:provider:pool_id)", baseURL)
 	}
 
 	poolIDStr := parts[2]

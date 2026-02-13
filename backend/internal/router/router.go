@@ -9,6 +9,7 @@ import (
 	"api-aggregator/backend/internal/domain/loadbalancer"
 	"api-aggregator/backend/internal/domain/log"
 	"api-aggregator/backend/internal/domain/pricing"
+	"api-aggregator/backend/internal/domain/proxy"
 	"api-aggregator/backend/internal/domain/quota"
 	"api-aggregator/backend/internal/domain/settings"
 	"api-aggregator/backend/internal/domain/stats"
@@ -36,6 +37,7 @@ type Router struct {
 	loadBalancerHandler  *loadbalancer.Handler
 	accountPoolHandler   *accountpool.Handler
 	settingsHandler      *settings.Handler
+	proxyHandler         *proxy.Handler
 }
 
 // Config 路由配置
@@ -56,6 +58,7 @@ type Config struct {
 	LoadBalancerHandler  *loadbalancer.Handler
 	AccountPoolHandler   *accountpool.Handler
 	SettingsHandler      *settings.Handler
+	ProxyHandler         *proxy.Handler
 }
 
 // New 创建路由管理器实例
@@ -75,6 +78,7 @@ func New(config *Config) *Router {
 		loadBalancerHandler:  config.LoadBalancerHandler,
 		accountPoolHandler:   config.AccountPoolHandler,
 		settingsHandler:      config.SettingsHandler,
+		proxyHandler:         config.ProxyHandler,
 	}
 }
 
@@ -93,6 +97,7 @@ func (r *Router) Setup() {
 	r.setupAuthRoutes()
 	r.setupUserRoutes()
 	r.setupAPIKeyRoutes()
+	r.setupProxyRoutes()
 	r.setupAdminRoutes()
 }
 
@@ -331,3 +336,21 @@ func (r *Router) setupAdminSettingsRoutes(group *gin.RouterGroup) {
 	}
 }
 
+
+
+// setupProxyRoutes 设置代理路由（OpenAI 兼容接口）
+func (r *Router) setupProxyRoutes() {
+	// OpenAI 兼容接口
+	v1 := r.engine.Group("/v1")
+	v1.Use(r.mw.APIKey.Handle()) // API Key 验证
+	{
+		// OpenAI 格式
+		v1.POST("/chat/completions", r.proxyHandler.ChatCompletionsOpenAI)
+		
+		// Anthropic 格式
+		v1.POST("/messages", r.proxyHandler.ChatCompletionsAnthropic)
+		
+		// Gemini 格式 - 使用通配符匹配
+		v1.POST("/models/*action", r.proxyHandler.ChatCompletionsGemini)
+	}
+}

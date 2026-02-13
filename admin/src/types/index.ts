@@ -98,23 +98,40 @@ export interface AccountCredential {
   id: number;
   created_at: string;
   updated_at: string;
-  name: string;
-  description?: string;
+  pool_id: number;
   provider: string;
   auth_type: string;
-  credentials_data: Record<string, any>;
+  api_key?: string;
+  access_token?: string;
+  refresh_token?: string;
+  session_token?: string;
   expires_at?: string;
+  account_name?: string;
+  account_email?: string;
+  weight: number;
   is_active: boolean;
-  error_message?: string;
-  last_check_at?: string;
-  request_count: number;
-  success_count: number;
-  error_count: number;
+  health_status: string;
+  last_checked_at?: string;
   last_used_at?: string;
-  daily_quota: number;
-  daily_used: number;
-  quota_reset_at?: string;
-  pool_id?: number;
+  total_requests: number;
+  total_errors: number;
+  rate_limit: number;
+  current_usage: number;
+  rate_limit_reset_at?: string;
+}
+
+export interface CreateCredentialRequest {
+  pool_id: number;
+  provider: string;
+  auth_type: 'api_key' | 'oauth' | 'session_token';
+  api_key?: string;
+  access_token?: string;
+  refresh_token?: string;
+  session_token?: string;
+  account_name?: string;
+  account_email?: string;
+  weight?: number;
+  rate_limit?: number;
 }
 
 export interface PoolStats {
@@ -124,4 +141,15 @@ export interface PoolStats {
   total_creds: number;
   active_creds: number;
   total_requests: number;
+}
+
+// List response types
+export interface CredentialListResponse {
+  credentials: AccountCredential[];
+  total: number;
+}
+
+export interface PoolListResponse {
+  pools: AccountPool[];
+  total: number;
 }

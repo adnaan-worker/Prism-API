@@ -24,6 +24,7 @@ type Repository interface {
 	UpdateCredential(ctx context.Context, cred *AccountCredential) error
 	DeleteCredential(ctx context.Context, id uint) error
 	FindCredentialByID(ctx context.Context, id uint) (*AccountCredential, error)
+	FindActiveCredentialsByPoolID(ctx context.Context, poolID uint) ([]*AccountCredential, error)
 	ListCredentials(ctx context.Context, filter *CredentialFilter, opts *query.Options) ([]*AccountCredential, int64, error)
 	UpdateCredentialStatus(ctx context.Context, id uint, isActive bool) error
 	IncrementCredentialRequests(ctx context.Context, id uint) error
@@ -319,4 +320,14 @@ func (r *repository) IncrementCredentialErrors(ctx context.Context, id uint) err
 		Where("id = ?", id).
 		UpdateColumn("total_errors", gorm.Expr("total_errors + ?", 1)).
 		Error
+}
+
+// FindActiveCredentialsByPoolID 查找账号池的所有活跃凭据
+func (r *repository) FindActiveCredentialsByPoolID(ctx context.Context, poolID uint) ([]*AccountCredential, error) {
+	var creds []*AccountCredential
+	err := r.db.WithContext(ctx).
+		Where("pool_id = ? AND is_active = ?", poolID, true).
+		Order("weight DESC, total_requests ASC").
+		Find(&creds).Error
+	return creds, err
 }

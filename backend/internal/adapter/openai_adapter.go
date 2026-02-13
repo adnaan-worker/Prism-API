@@ -39,18 +39,27 @@ func (a *OpenAIAdapter) GetType() string {
 
 // OpenAI request/response structures
 type openAIRequest struct {
-	Model       string    `json:"model"`
-	Messages    []Message `json:"messages"`
-	Temperature float64   `json:"temperature,omitempty"`
-	TopP        float64   `json:"top_p,omitempty"`
-	MaxTokens   int       `json:"max_tokens,omitempty"`
-	Stream      bool      `json:"stream,omitempty"`
-	Stop        interface{} `json:"stop,omitempty"` // string or []string
-	N           int       `json:"n,omitempty"`
-	PresencePenalty  float64 `json:"presence_penalty,omitempty"`
-	FrequencyPenalty float64 `json:"frequency_penalty,omitempty"`
-	Tools       []Tool    `json:"tools,omitempty"`
-	ToolChoice  interface{} `json:"tool_choice,omitempty"`
+	Model              string                 `json:"model"`
+	Messages           []Message              `json:"messages"`
+	Temperature        float64                `json:"temperature,omitempty"`
+	TopP               float64                `json:"top_p,omitempty"`
+	MaxTokens          int                    `json:"max_tokens,omitempty"`
+	Stream             bool                   `json:"stream,omitempty"`
+	Stop               interface{}            `json:"stop,omitempty"` // string or []string
+	N                  int                    `json:"n,omitempty"`
+	PresencePenalty    float64                `json:"presence_penalty,omitempty"`
+	FrequencyPenalty   float64                `json:"frequency_penalty,omitempty"`
+	Tools              []Tool                 `json:"tools,omitempty"`
+	ToolChoice         interface{}            `json:"tool_choice,omitempty"`
+	User               string                 `json:"user,omitempty"`
+	Seed               *int                   `json:"seed,omitempty"`
+	LogitBias          map[string]int         `json:"logit_bias,omitempty"`
+	Logprobs           bool                   `json:"logprobs,omitempty"`
+	TopLogprobs        int                    `json:"top_logprobs,omitempty"`
+	ResponseFormat     *ResponseFormat        `json:"response_format,omitempty"`
+	ServiceTier        string                 `json:"service_tier,omitempty"`
+	ParallelToolCalls  *bool                  `json:"parallel_tool_calls,omitempty"`
+	StreamOptions      *StreamOptions         `json:"stream_options,omitempty"`
 }
 
 type openAIResponse struct {
@@ -84,18 +93,27 @@ type openAIUsage struct {
 func (a *OpenAIAdapter) Call(ctx context.Context, req *ChatRequest) (*ChatResponse, error) {
 	// Convert unified request to OpenAI format
 	openAIReq := &openAIRequest{
-		Model:            req.Model,
-		Messages:         req.Messages,
-		Temperature:      req.Temperature,
-		TopP:             req.TopP,
-		MaxTokens:        req.MaxTokens,
-		Stream:           req.Stream,
-		Stop:             req.Stop,
-		N:                req.N,
-		PresencePenalty:  req.PresencePenalty,
-		FrequencyPenalty: req.FrequencyPenalty,
-		Tools:            req.Tools,
-		ToolChoice:       req.ToolChoice,
+		Model:             req.Model,
+		Messages:          req.Messages,
+		Temperature:       req.Temperature,
+		TopP:              req.TopP,
+		MaxTokens:         req.MaxTokens,
+		Stream:            req.Stream,
+		Stop:              req.Stop,
+		N:                 req.N,
+		PresencePenalty:   req.PresencePenalty,
+		FrequencyPenalty:  req.FrequencyPenalty,
+		Tools:             req.Tools,
+		ToolChoice:        req.ToolChoice,
+		User:              req.User,
+		Seed:              req.Seed,
+		LogitBias:         req.LogitBias,
+		Logprobs:          req.Logprobs,
+		TopLogprobs:       req.TopLogprobs,
+		ResponseFormat:    req.ResponseFormat,
+		ServiceTier:       req.ServiceTier,
+		ParallelToolCalls: req.ParallelToolCalls,
+		StreamOptions:     req.StreamOptions,
 	}
 
 	// Marshal request
@@ -192,18 +210,27 @@ func (a *OpenAIAdapter) convertResponse(resp *openAIResponse) *ChatResponse {
 func (a *OpenAIAdapter) CallStream(ctx context.Context, req *ChatRequest) (*http.Response, error) {
 	// Convert unified request to OpenAI format with stream enabled
 	openAIReq := &openAIRequest{
-		Model:            req.Model,
-		Messages:         req.Messages,
-		Temperature:      req.Temperature,
-		TopP:             req.TopP,
-		MaxTokens:        req.MaxTokens,
-		Stream:           true,
-		Stop:             req.Stop,
-		N:                req.N,
-		PresencePenalty:  req.PresencePenalty,
-		FrequencyPenalty: req.FrequencyPenalty,
-		Tools:            req.Tools,
-		ToolChoice:       req.ToolChoice,
+		Model:             req.Model,
+		Messages:          req.Messages,
+		Temperature:       req.Temperature,
+		TopP:              req.TopP,
+		MaxTokens:         req.MaxTokens,
+		Stream:            true,
+		Stop:              req.Stop,
+		N:                 req.N,
+		PresencePenalty:   req.PresencePenalty,
+		FrequencyPenalty:  req.FrequencyPenalty,
+		Tools:             req.Tools,
+		ToolChoice:        req.ToolChoice,
+		User:              req.User,
+		Seed:              req.Seed,
+		LogitBias:         req.LogitBias,
+		Logprobs:          req.Logprobs,
+		TopLogprobs:       req.TopLogprobs,
+		ResponseFormat:    req.ResponseFormat,
+		ServiceTier:       req.ServiceTier,
+		ParallelToolCalls: req.ParallelToolCalls,
+		StreamOptions:     req.StreamOptions,
 	}
 
 	// Marshal request

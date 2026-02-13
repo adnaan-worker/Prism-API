@@ -38,15 +38,18 @@ func (a *AnthropicAdapter) GetType() string {
 
 // Anthropic request/response structures
 type anthropicRequest struct {
-	Model       string             `json:"model"`
-	Messages    []anthropicMessage `json:"messages"`
-	MaxTokens   int                `json:"max_tokens"`
-	Temperature float64            `json:"temperature,omitempty"`
-	TopP        float64            `json:"top_p,omitempty"`
-	TopK        int                `json:"top_k,omitempty"`
-	System      string             `json:"system,omitempty"`
-	Tools       []anthropicTool    `json:"tools,omitempty"`
-	Stream      bool               `json:"stream,omitempty"`
+	Model         string             `json:"model"`
+	Messages      []anthropicMessage `json:"messages"`
+	MaxTokens     int                `json:"max_tokens"`
+	Temperature   float64            `json:"temperature,omitempty"`
+	TopP          float64            `json:"top_p,omitempty"`
+	TopK          int                `json:"top_k,omitempty"`
+	System        string             `json:"system,omitempty"`
+	Tools         []anthropicTool    `json:"tools,omitempty"`
+	ToolChoice    interface{}        `json:"tool_choice,omitempty"`
+	Stream        bool               `json:"stream,omitempty"`
+	StopSequences []string           `json:"stop_sequences,omitempty"`
+	Metadata      map[string]interface{} `json:"metadata,omitempty"`
 }
 
 type anthropicMessage struct {
@@ -94,18 +97,39 @@ func (a *AnthropicAdapter) Call(ctx context.Context, req *ChatRequest) (*ChatRes
 	}
 
 	anthropicReq := &anthropicRequest{
-		Model:       req.Model,
-		Messages:    messages,
-		MaxTokens:   maxTokens,
-		Temperature: req.Temperature,
-		TopP:        req.TopP,
-		TopK:        req.TopK,
-		System:      system,
+		Model:         req.Model,
+		Messages:      messages,
+		MaxTokens:     maxTokens,
+		Temperature:   req.Temperature,
+		TopP:          req.TopP,
+		TopK:          req.TopK,
+		System:        system,
+		StopSequences: req.StopSequences,
+		Metadata:      req.Metadata,
+	}
+
+	// Convert stop to stop_sequences if provided
+	if req.Stop != nil && len(req.StopSequences) == 0 {
+		switch v := req.Stop.(type) {
+		case string:
+			anthropicReq.StopSequences = []string{v}
+		case []string:
+			anthropicReq.StopSequences = v
+		case []interface{}:
+			stops := make([]string, 0, len(v))
+			for _, s := range v {
+				if str, ok := s.(string); ok {
+					stops = append(stops, str)
+				}
+			}
+			anthropicReq.StopSequences = stops
+		}
 	}
 
 	// Convert tools if present
 	if len(req.Tools) > 0 {
 		anthropicReq.Tools = a.convertTools(req.Tools)
+		anthropicReq.ToolChoice = req.ToolChoice
 	}
 
 	// Marshal request
@@ -295,19 +319,40 @@ func (a *AnthropicAdapter) CallStream(ctx context.Context, req *ChatRequest) (*h
 	}
 
 	anthropicReq := &anthropicRequest{
-		Model:       req.Model,
-		Messages:    messages,
-		MaxTokens:   maxTokens,
-		Temperature: req.Temperature,
-		TopP:        req.TopP,
-		TopK:        req.TopK,
-		System:      system,
-		Stream:      true,
+		Model:         req.Model,
+		Messages:      messages,
+		MaxTokens:     maxTokens,
+		Temperature:   req.Temperature,
+		TopP:          req.TopP,
+		TopK:          req.TopK,
+		System:        system,
+		Stream:        true,
+		StopSequences: req.StopSequences,
+		Metadata:      req.Metadata,
+	}
+
+	// Convert stop to stop_sequences if provided
+	if req.Stop != nil && len(req.StopSequences) == 0 {
+		switch v := req.Stop.(type) {
+		case string:
+			anthropicReq.StopSequences = []string{v}
+		case []string:
+			anthropicReq.StopSequences = v
+		case []interface{}:
+			stops := make([]string, 0, len(v))
+			for _, s := range v {
+				if str, ok := s.(string); ok {
+					stops = append(stops, str)
+				}
+			}
+			anthropicReq.StopSequences = stops
+		}
 	}
 
 	// Convert tools if present
 	if len(req.Tools) > 0 {
 		anthropicReq.Tools = a.convertTools(req.Tools)
+		anthropicReq.ToolChoice = req.ToolChoice
 	}
 
 	// Marshal request

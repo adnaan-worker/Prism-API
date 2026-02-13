@@ -2,6 +2,7 @@ package app
 
 import (
 	"api-aggregator/backend/config"
+	"api-aggregator/backend/internal/adapter"
 	"api-aggregator/backend/internal/domain/accountpool"
 	"api-aggregator/backend/internal/domain/apiconfig"
 	"api-aggregator/backend/internal/domain/apikey"
@@ -10,6 +11,7 @@ import (
 	"api-aggregator/backend/internal/domain/loadbalancer"
 	"api-aggregator/backend/internal/domain/log"
 	"api-aggregator/backend/internal/domain/pricing"
+	"api-aggregator/backend/internal/domain/proxy"
 	"api-aggregator/backend/internal/domain/quota"
 	"api-aggregator/backend/internal/domain/settings"
 	"api-aggregator/backend/internal/domain/stats"
@@ -17,8 +19,11 @@ import (
 	"api-aggregator/backend/internal/middleware"
 	"api-aggregator/backend/internal/router"
 	pkgCache "api-aggregator/backend/pkg/cache"
+	"api-aggregator/backend/pkg/embedding"
 	"api-aggregator/backend/pkg/logger"
+	"api-aggregator/backend/pkg/runtime"
 	"database/sql"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/driver/postgres"
@@ -28,11 +33,12 @@ import (
 
 // App 应用实例
 type App struct {
-	Config *config.Config
-	DB     *gorm.DB
-	Cache  pkgCache.Cache
-	Logger *logger.Logger
-	Engine *gin.Engine
+	Config        *config.Config
+	DB            *gorm.DB
+	Cache         pkgCache.Cache
+	Logger        *logger.Logger
+	Engine        *gin.Engine
+	RuntimeConfig *runtime.Manager
 }
 
 // New 创建应用实例
@@ -53,6 +59,11 @@ func New(cfg *config.Config) (*App, error) {
 
 	// 初始化缓存
 	if err := app.initCache(); err != nil {
+		return nil, err
+	}
+
+	// 初始化运行时配置管理器
+	if err := app.initRuntimeConfig(); err != nil {
 		return nil, err
 	}
 
@@ -180,6 +191,44 @@ func (app *App) initRouter() error {
 	accountPoolService := accountpool.NewService(accountPoolRepo)
 	settingsService := settings.NewService(settingsRepo, userRepo)
 
+	// 初始化 Adapter Factory
+	adapterFactory := adapter.NewFactory()
+
+	// 初始化模型映射器（用于 Kiro）
+	modelMapper := apiconfig.NewModelMapper(apiConfigRepo)
+
+	// 初始化账号池管理器
+	poolManager := accountpool.NewPoolManager(accountPoolRepo, modelMapper)
+	poolManager.SetAdapterFactory(adapterFactory)
+	
+	// 将账号池管理器注入到 Adapter Factory
+	adapterFactory.SetPoolManager(poolManager)
+
+	// 初始化 Embedding 客户端（如果启用）
+	var embeddingClient *embedding.Client
+	if app.Config.Embedding.Enabled {
+		embeddingClient = embedding.NewClient(
+			app.Config.Embedding.URL,
+			app.Config.Embedding.Timeout,
+		)
+	}
+
+	// 初始化 Proxy 服务
+	proxyService := proxy.NewService(
+		adapterFactory,
+		apiConfigRepo,
+		loadBalancerService,
+		cacheService,
+		quotaService,
+		pricingService,
+		logService,
+		app.RuntimeConfig,
+		*app.Logger,
+	)
+	if embeddingClient != nil {
+		proxyService.SetEmbeddingClient(embeddingClient)
+	}
+
 	// 初始化处理器层
 	authHandler := auth.NewHandler(authService)
 	apiKeyHandler := apikey.NewHandler(apiKeyService)
@@ -193,6 +242,7 @@ func (app *App) initRouter() error {
 	loadBalancerHandler := loadbalancer.NewHandler(loadBalancerService)
 	accountPoolHandler := accountpool.NewHandler(accountPoolService)
 	settingsHandler := settings.NewHandler(settingsService)
+	proxyHandler := proxy.NewHandler(proxyService)
 
 	// 初始化中间件管理器
 	mw := middleware.NewManager(&middleware.Config{
@@ -228,6 +278,7 @@ func (app *App) initRouter() error {
 		LoadBalancerHandler: loadBalancerHandler,
 		AccountPoolHandler:  accountPoolHandler,
 		SettingsHandler:     settingsHandler,
+		ProxyHandler:        proxyHandler,
 	})
 
 	// 设置路由
@@ -245,8 +296,31 @@ func (app *App) Run(addr string) error {
 
 // Close 关闭应用
 func (app *App) Close() error {
+	// 停止运行时配置管理器
+	if app.RuntimeConfig != nil {
+		app.RuntimeConfig.Stop()
+	}
+	
 	if app.Logger != nil {
 		app.Logger.Sync()
 	}
+	return nil
+}
+
+
+// initRuntimeConfig 初始化运行时配置管理器
+func (app *App) initRuntimeConfig() error {
+	manager := runtime.NewManager(app.DB)
+	
+	// 加载配置
+	if err := manager.Load(); err != nil {
+		app.Logger.Warn("Failed to load runtime config, using defaults", logger.Error(err))
+	}
+	
+	// 启动自动重载（每分钟检查一次）
+	manager.StartAutoReload(1 * time.Minute)
+	
+	app.RuntimeConfig = manager
+	app.Logger.Info("Runtime config manager initialized")
 	return nil
 }

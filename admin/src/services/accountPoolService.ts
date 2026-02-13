@@ -1,11 +1,11 @@
 import { apiClient as api } from '../lib/api';
-import type { AccountPool, AccountCredential, PoolStats } from '../types';
+import type { AccountPool, AccountCredential, PoolStats, CredentialListResponse, PoolListResponse } from '../types';
 
 export const accountPoolService = {
   // 账号池管理
   getPools: async (params?: { provider?: string }) => {
-    const { data } = await api.get<AccountPool[]>('/admin/account-pools', { params });
-    return data;
+    const { data } = await api.get<PoolListResponse>('/admin/account-pools', { params });
+    return data.pools || [];
   },
 
   getPool: async (id: number) => {
@@ -39,8 +39,8 @@ export const accountPoolService = {
 
   // 凭据管理
   getCredentials: async (params?: { pool_id?: number; provider?: string; status?: string }) => {
-    const { data } = await api.get<AccountCredential[]>('/admin/account-pools/credentials', { params });
-    return data;
+    const { data } = await api.get<CredentialListResponse>('/admin/account-pools/credentials', { params });
+    return data.credentials || [];
   },
 
   getCredential: async (id: number) => {

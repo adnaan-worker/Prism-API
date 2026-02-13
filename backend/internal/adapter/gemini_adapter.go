@@ -38,9 +38,13 @@ func (a *GeminiAdapter) GetType() string {
 
 // Gemini request/response structures
 type geminiRequest struct {
-	Contents         []geminiContent         `json:"contents"`
-	GenerationConfig *geminiGenerationConfig `json:"generationConfig,omitempty"`
-	Tools            []geminiToolConfig      `json:"tools,omitempty"`
+	Contents           []geminiContent         `json:"contents"`
+	SystemInstruction  *geminiContent          `json:"systemInstruction,omitempty"`
+	GenerationConfig   *geminiGenerationConfig `json:"generationConfig,omitempty"`
+	Tools              []geminiToolConfig      `json:"tools,omitempty"`
+	ToolConfig         *geminiToolConfigSettings `json:"toolConfig,omitempty"`
+	SafetySettings     []geminiSafetySetting   `json:"safetySettings,omitempty"`
+	CachedContent      string                  `json:"cachedContent,omitempty"`
 }
 
 type geminiContent struct {
@@ -68,6 +72,20 @@ type geminiToolConfig struct {
 	FunctionDeclarations []geminiFunctionDeclaration `json:"functionDeclarations"`
 }
 
+type geminiToolConfigSettings struct {
+	FunctionCallingConfig *geminiFunctionCallingConfig `json:"functionCallingConfig,omitempty"`
+}
+
+type geminiFunctionCallingConfig struct {
+	Mode                  string   `json:"mode,omitempty"` // AUTO, ANY, NONE
+	AllowedFunctionNames  []string `json:"allowedFunctionNames,omitempty"`
+}
+
+type geminiSafetySetting struct {
+	Category  string `json:"category"`
+	Threshold string `json:"threshold"`
+}
+
 type geminiFunctionDeclaration struct {
 	Name        string                 `json:"name"`
 	Description string                 `json:"description"`
@@ -75,11 +93,19 @@ type geminiFunctionDeclaration struct {
 }
 
 type geminiGenerationConfig struct {
-	Temperature     float64  `json:"temperature,omitempty"`
-	TopP            float64  `json:"topP,omitempty"`
-	TopK            int      `json:"topK,omitempty"`
-	MaxOutputTokens int      `json:"maxOutputTokens,omitempty"`
-	StopSequences   []string `json:"stopSequences,omitempty"`
+	Temperature        float64                `json:"temperature,omitempty"`
+	TopP               float64                `json:"topP,omitempty"`
+	TopK               int                    `json:"topK,omitempty"`
+	MaxOutputTokens    int                    `json:"maxOutputTokens,omitempty"`
+	StopSequences      []string               `json:"stopSequences,omitempty"`
+	CandidateCount     int                    `json:"candidateCount,omitempty"`
+	PresencePenalty    float64                `json:"presencePenalty,omitempty"`
+	FrequencyPenalty   float64                `json:"frequencyPenalty,omitempty"`
+	Seed               int                    `json:"seed,omitempty"`
+	ResponseMimeType   string                 `json:"responseMimeType,omitempty"`
+	ResponseSchema     map[string]interface{} `json:"responseSchema,omitempty"`
+	ResponseLogprobs   bool                   `json:"responseLogprobs,omitempty"`
+	Logprobs           int                    `json:"logprobs,omitempty"`
 }
 
 type geminiResponse struct {
@@ -102,43 +128,143 @@ type geminiUsage struct {
 // Call makes a request to Gemini API
 func (a *GeminiAdapter) Call(ctx context.Context, req *ChatRequest) (*ChatResponse, error) {
 	// Convert unified request to Gemini format
-	contents := a.convertMessages(req.Messages)
+	contents, systemInstruction := a.convertMessages(req.Messages)
 
 	geminiReq := &geminiRequest{
-		Contents: contents,
+		Contents:          contents,
+		SystemInstruction: systemInstruction,
 	}
 
-	// Add generation config if specified
-	if req.Temperature > 0 || req.TopP > 0 || req.TopK > 0 || req.MaxTokens > 0 {
-		geminiReq.GenerationConfig = &geminiGenerationConfig{
-			Temperature:     req.Temperature,
-			TopP:            req.TopP,
-			TopK:            req.TopK,
-			MaxOutputTokens: req.MaxTokens,
-		}
-		
-		// Convert stop sequences
-		if req.Stop != nil {
-			switch v := req.Stop.(type) {
-			case string:
-				geminiReq.GenerationConfig.StopSequences = []string{v}
-			case []string:
-				geminiReq.GenerationConfig.StopSequences = v
-			case []interface{}:
-				stops := make([]string, len(v))
-				for i, s := range v {
-					if str, ok := s.(string); ok {
-						stops[i] = str
-					}
+	// Build generation config
+	genConfig := &geminiGenerationConfig{}
+	hasConfig := false
+
+	if req.Temperature > 0 {
+		genConfig.Temperature = req.Temperature
+		hasConfig = true
+	}
+	if req.TopP > 0 {
+		genConfig.TopP = req.TopP
+		hasConfig = true
+	}
+	if req.TopK > 0 {
+		genConfig.TopK = req.TopK
+		hasConfig = true
+	}
+	if req.MaxTokens > 0 {
+		genConfig.MaxOutputTokens = req.MaxTokens
+		hasConfig = true
+	}
+	if req.N > 0 {
+		genConfig.CandidateCount = req.N
+		hasConfig = true
+	}
+	if req.PresencePenalty != 0 {
+		genConfig.PresencePenalty = req.PresencePenalty
+		hasConfig = true
+	}
+	if req.FrequencyPenalty != 0 {
+		genConfig.FrequencyPenalty = req.FrequencyPenalty
+		hasConfig = true
+	}
+	if req.Seed != nil && *req.Seed > 0 {
+genConfig.Seed = *req.Seed
+		hasConfig = true
+	}
+	if req.Logprobs {
+		genConfig.ResponseLogprobs = true
+		hasConfig = true
+	}
+	if req.TopLogprobs > 0 {
+		genConfig.Logprobs = req.TopLogprobs
+		hasConfig = true
+	}
+
+	// Handle response format (JSON mode)
+	if req.ResponseFormat != nil {
+		if req.ResponseFormat.Type == "json_object" || req.ResponseFormat.Type == "json_schema" {
+			genConfig.ResponseMimeType = "application/json"
+			if req.ResponseFormat.JSONSchema != nil {
+				if schema, ok := req.ResponseFormat.JSONSchema.(map[string]interface{}); ok {
+					genConfig.ResponseSchema = schema
 				}
-				geminiReq.GenerationConfig.StopSequences = stops
 			}
+			hasConfig = true
 		}
+	}
+
+	// Convert stop sequences
+	if req.Stop != nil {
+		switch v := req.Stop.(type) {
+		case string:
+			genConfig.StopSequences = []string{v}
+		case []string:
+			genConfig.StopSequences = v
+		case []interface{}:
+			stops := make([]string, len(v))
+			for i, s := range v {
+				if str, ok := s.(string); ok {
+					stops[i] = str
+				}
+			}
+			genConfig.StopSequences = stops
+		}
+		hasConfig = true
+	}
+
+	if hasConfig {
+		geminiReq.GenerationConfig = genConfig
 	}
 
 	// Convert tools if present
 	if len(req.Tools) > 0 {
 		geminiReq.Tools = a.convertTools(req.Tools)
+		
+		// Handle tool choice
+		if req.ToolChoice != nil {
+			toolConfig := &geminiToolConfigSettings{
+				FunctionCallingConfig: &geminiFunctionCallingConfig{},
+			}
+			
+			switch tc := req.ToolChoice.(type) {
+			case string:
+				if tc == "auto" {
+					toolConfig.FunctionCallingConfig.Mode = "AUTO"
+				} else if tc == "none" {
+					toolConfig.FunctionCallingConfig.Mode = "NONE"
+				} else if tc == "required" {
+					toolConfig.FunctionCallingConfig.Mode = "ANY"
+				}
+			case map[string]interface{}:
+				if tcType, ok := tc["type"].(string); ok && tcType == "function" {
+					if funcObj, ok := tc["function"].(map[string]interface{}); ok {
+						if funcName, ok := funcObj["name"].(string); ok {
+							toolConfig.FunctionCallingConfig.Mode = "ANY"
+							toolConfig.FunctionCallingConfig.AllowedFunctionNames = []string{funcName}
+						}
+					}
+				}
+			}
+			
+			geminiReq.ToolConfig = toolConfig
+		}
+	}
+
+	// Handle safety settings
+	if len(req.SafetySettings) > 0 {
+		safetySettings := make([]geminiSafetySetting, 0, len(req.SafetySettings))
+		for _, s := range req.SafetySettings {
+			safetySettings = append(safetySettings, geminiSafetySetting{
+			Category:  s.Category,
+			Threshold: s.Threshold,
+			})
+		}
+		geminiReq.SafetySettings = safetySettings
+	}
+
+	// Handle cached content
+	if req.CachedContent != "" {
+		geminiReq.CachedContent = req.CachedContent
 	}
 
 	// Marshal request
@@ -188,8 +314,10 @@ func (a *GeminiAdapter) Call(ctx context.Context, req *ChatRequest) (*ChatRespon
 }
 
 // convertMessages converts OpenAI-style messages to Gemini format
-func (a *GeminiAdapter) convertMessages(messages []Message) []geminiContent {
+// Returns: contents and system instruction (if any)
+func (a *GeminiAdapter) convertMessages(messages []Message) ([]geminiContent, *geminiContent) {
 	var contents []geminiContent
+	var systemInstruction *geminiContent
 
 	for _, msg := range messages {
 		// Gemini uses "user" and "model" roles
@@ -197,8 +325,16 @@ func (a *GeminiAdapter) convertMessages(messages []Message) []geminiContent {
 		if role == "assistant" {
 			role = "model"
 		}
-		// Skip system messages or prepend to first user message
+		
+		// Extract system message as system instruction
 		if role == "system" {
+			if msg.Content != "" {
+				systemInstruction = &geminiContent{
+					Parts: []geminiPart{
+						{Text: msg.Content},
+					},
+				}
+			}
 			continue
 		}
 
@@ -249,7 +385,7 @@ func (a *GeminiAdapter) convertMessages(messages []Message) []geminiContent {
 		}
 	}
 
-	return contents
+	return contents, systemInstruction
 }
 
 // convertTools converts OpenAI-style tools to Gemini format
@@ -347,43 +483,143 @@ func convertGeminiFinishReason(reason string) string {
 // CallStream makes a streaming request to Gemini API
 func (a *GeminiAdapter) CallStream(ctx context.Context, req *ChatRequest) (*http.Response, error) {
 	// Convert unified request to Gemini format
-	contents := a.convertMessages(req.Messages)
+	contents, systemInstruction := a.convertMessages(req.Messages)
 
 	geminiReq := &geminiRequest{
-		Contents: contents,
+		Contents:          contents,
+		SystemInstruction: systemInstruction,
 	}
 
-	// Add generation config if specified
-	if req.Temperature > 0 || req.TopP > 0 || req.TopK > 0 || req.MaxTokens > 0 {
-		geminiReq.GenerationConfig = &geminiGenerationConfig{
-			Temperature:     req.Temperature,
-			TopP:            req.TopP,
-			TopK:            req.TopK,
-			MaxOutputTokens: req.MaxTokens,
-		}
-		
-		// Convert stop sequences
-		if req.Stop != nil {
-			switch v := req.Stop.(type) {
-			case string:
-				geminiReq.GenerationConfig.StopSequences = []string{v}
-			case []string:
-				geminiReq.GenerationConfig.StopSequences = v
-			case []interface{}:
-				stops := make([]string, len(v))
-				for i, s := range v {
-					if str, ok := s.(string); ok {
-						stops[i] = str
-					}
+	// Build generation config (same as Call method)
+	genConfig := &geminiGenerationConfig{}
+	hasConfig := false
+
+	if req.Temperature > 0 {
+		genConfig.Temperature = req.Temperature
+		hasConfig = true
+	}
+	if req.TopP > 0 {
+		genConfig.TopP = req.TopP
+		hasConfig = true
+	}
+	if req.TopK > 0 {
+		genConfig.TopK = req.TopK
+		hasConfig = true
+	}
+	if req.MaxTokens > 0 {
+		genConfig.MaxOutputTokens = req.MaxTokens
+		hasConfig = true
+	}
+	if req.N > 0 {
+		genConfig.CandidateCount = req.N
+		hasConfig = true
+	}
+	if req.PresencePenalty != 0 {
+		genConfig.PresencePenalty = req.PresencePenalty
+		hasConfig = true
+	}
+	if req.FrequencyPenalty != 0 {
+		genConfig.FrequencyPenalty = req.FrequencyPenalty
+		hasConfig = true
+	}
+	if req.Seed != nil && *req.Seed > 0 {
+genConfig.Seed = *req.Seed
+		hasConfig = true
+	}
+	if req.Logprobs {
+		genConfig.ResponseLogprobs = true
+		hasConfig = true
+	}
+	if req.TopLogprobs > 0 {
+		genConfig.Logprobs = req.TopLogprobs
+		hasConfig = true
+	}
+
+	// Handle response format (JSON mode)
+	if req.ResponseFormat != nil {
+		if req.ResponseFormat.Type == "json_object" || req.ResponseFormat.Type == "json_schema" {
+			genConfig.ResponseMimeType = "application/json"
+			if req.ResponseFormat.JSONSchema != nil {
+				if schema, ok := req.ResponseFormat.JSONSchema.(map[string]interface{}); ok {
+					genConfig.ResponseSchema = schema
 				}
-				geminiReq.GenerationConfig.StopSequences = stops
 			}
+			hasConfig = true
 		}
+	}
+
+	// Convert stop sequences
+	if req.Stop != nil {
+		switch v := req.Stop.(type) {
+		case string:
+			genConfig.StopSequences = []string{v}
+		case []string:
+			genConfig.StopSequences = v
+		case []interface{}:
+			stops := make([]string, len(v))
+			for i, s := range v {
+				if str, ok := s.(string); ok {
+					stops[i] = str
+				}
+			}
+			genConfig.StopSequences = stops
+		}
+		hasConfig = true
+	}
+
+	if hasConfig {
+		geminiReq.GenerationConfig = genConfig
 	}
 
 	// Convert tools if present
 	if len(req.Tools) > 0 {
 		geminiReq.Tools = a.convertTools(req.Tools)
+		
+		// Handle tool choice
+		if req.ToolChoice != nil {
+			toolConfig := &geminiToolConfigSettings{
+				FunctionCallingConfig: &geminiFunctionCallingConfig{},
+			}
+			
+			switch tc := req.ToolChoice.(type) {
+			case string:
+				if tc == "auto" {
+					toolConfig.FunctionCallingConfig.Mode = "AUTO"
+				} else if tc == "none" {
+					toolConfig.FunctionCallingConfig.Mode = "NONE"
+				} else if tc == "required" {
+					toolConfig.FunctionCallingConfig.Mode = "ANY"
+				}
+			case map[string]interface{}:
+				if tcType, ok := tc["type"].(string); ok && tcType == "function" {
+					if funcObj, ok := tc["function"].(map[string]interface{}); ok {
+						if funcName, ok := funcObj["name"].(string); ok {
+							toolConfig.FunctionCallingConfig.Mode = "ANY"
+							toolConfig.FunctionCallingConfig.AllowedFunctionNames = []string{funcName}
+						}
+					}
+				}
+			}
+			
+			geminiReq.ToolConfig = toolConfig
+		}
+	}
+
+	// Handle safety settings
+	if len(req.SafetySettings) > 0 {
+safetySettings := make([]geminiSafetySetting, 0, len(req.SafetySettings))
+for _, s := range req.SafetySettings {
+safetySettings = append(safetySettings, geminiSafetySetting{
+Category:  s.Category,
+Threshold: s.Threshold,
+})
+}
+geminiReq.SafetySettings = safetySettings
+}
+
+	// Handle cached content
+	if req.CachedContent != "" {
+		geminiReq.CachedContent = req.CachedContent
 	}
 
 	// Marshal request
@@ -420,3 +656,4 @@ func (a *GeminiAdapter) CallStream(ctx context.Context, req *ChatRequest) (*http
 	// Return response for streaming (caller must close body)
 	return resp, nil
 }
+

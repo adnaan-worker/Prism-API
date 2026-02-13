@@ -153,3 +153,23 @@ func (c *APIConfig) GetMetadata(key string) (interface{}, bool) {
 	val, ok := c.Metadata[key]
 	return val, ok
 }
+
+// GetType 获取类型（实现 adapter.APIConfigInterface）
+func (c *APIConfig) GetType() string {
+	return c.Type
+}
+
+// GetBaseURL 获取 BaseURL（实现 adapter.APIConfigInterface）
+func (c *APIConfig) GetBaseURL() string {
+	return c.BaseURL
+}
+
+// GetAPIKey 获取 APIKey（实现 adapter.APIConfigInterface）
+func (c *APIConfig) GetAPIKey() string {
+	return c.APIKey
+}
+
+// GetTimeout 获取超时时间（实现 adapter.APIConfigInterface）
+func (c *APIConfig) GetTimeout() int {
+	return c.Timeout
+}

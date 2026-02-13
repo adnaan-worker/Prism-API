@@ -39,8 +39,3 @@ type InlineData struct {
 	MimeType string `json:"mime_type"`
 	Data     string `json:"data"`
 }
-
-// ResponseFormat represents the response format configuration
-type ResponseFormat struct {
-	Type string `json:"type"` // text, json_object
-}

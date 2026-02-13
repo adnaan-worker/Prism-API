@@ -18,6 +18,7 @@ type Repository interface {
 	FindByCacheKey(ctx context.Context, cacheKey string) (*RequestCache, error)
 	FindByUserID(ctx context.Context, userID uint) ([]*RequestCache, error)
 	FindByModel(ctx context.Context, model string, limit int) ([]*RequestCache, error)
+	FindByUserAndModel(ctx context.Context, userID uint, model string) ([]*RequestCache, error)
 	List(ctx context.Context, filters []query.Filter, sorts []query.Sort, pagination *query.Pagination) ([]*RequestCache, int64, error)
 	IncrementHitCount(ctx context.Context, id uint) error
 	GetStats(ctx context.Context, userID *uint) (*CacheStatsResponse, error)
@@ -209,4 +210,20 @@ func (r *repository) CountByUserID(ctx context.Context, userID uint) (int64, err
 		Where("user_id = ? AND expires_at > ?", userID, time.Now()).
 		Count(&count).Error
 	return count, err
+}
+
+
+// FindByUserAndModel 根据用户ID和模型查找所有有效缓存（用于语义匹配）
+func (r *repository) FindByUserAndModel(ctx context.Context, userID uint, model string) ([]*RequestCache, error) {
+	var caches []*RequestCache
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND model = ? AND expires_at > ? AND embedding IS NOT NULL AND embedding != ''", 
+			userID, model, time.Now()).
+		Order("created_at DESC").
+		Limit(100). // 限制最多检查100条，避免性能问题
+		Find(&caches).Error
+	if err != nil {
+		return nil, err
+	}
+	return caches, nil
 }

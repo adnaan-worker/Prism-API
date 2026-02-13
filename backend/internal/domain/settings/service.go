@@ -4,6 +4,7 @@ import (
 	"api-aggregator/backend/internal/domain/user"
 	"api-aggregator/backend/pkg/crypto"
 	"api-aggregator/backend/pkg/errors"
+	"api-aggregator/backend/pkg/utils"
 	"context"
 	"strconv"
 )
@@ -38,9 +39,9 @@ func (s *service) GetRuntimeConfig(ctx context.Context) (*RuntimeConfigResponse,
 	keys := []string{
 		KeyRuntimeCacheEnabled,
 		KeyRuntimeCacheTTL,
-		KeyRuntimeMaxRetries,
-		KeyRuntimeTimeout,
-		KeyRuntimeEnableLoadBalance,
+		KeyRuntimeSemanticCacheEnabled,
+		KeyRuntimeSemanticThreshold,
+		KeyRuntimeEmbeddingEnabled,
 	}
 
 	settings, err := s.repo.GetMultiple(ctx, keys)
@@ -48,12 +49,16 @@ func (s *service) GetRuntimeConfig(ctx context.Context) (*RuntimeConfigResponse,
 		return nil, errors.Wrap(err, "failed to get runtime config")
 	}
 
+	// 将秒数转换为时间格式字符串
+	cacheTTLSeconds := s.getInt(settings, KeyRuntimeCacheTTL, 3600)
+	cacheTTL := utils.FormatDuration(cacheTTLSeconds)
+
 	config := &RuntimeConfigResponse{
-		CacheEnabled:      s.getBool(settings, KeyRuntimeCacheEnabled, true),
-		CacheTTL:          s.getInt(settings, KeyRuntimeCacheTTL, 3600),
-		MaxRetries:        s.getInt(settings, KeyRuntimeMaxRetries, 3),
-		Timeout:           s.getInt(settings, KeyRuntimeTimeout, 30),
-		EnableLoadBalance: s.getBool(settings, KeyRuntimeEnableLoadBalance, true),
+		CacheEnabled:         s.getBool(settings, KeyRuntimeCacheEnabled, true),
+		CacheTTL:             cacheTTL,
+		SemanticCacheEnabled: s.getBool(settings, KeyRuntimeSemanticCacheEnabled, false),
+		SemanticThreshold:    s.getFloat(settings, KeyRuntimeSemanticThreshold, 0.85),
+		EmbeddingEnabled:     s.getBool(settings, KeyRuntimeEmbeddingEnabled, false),
 	}
 
 	return config, nil
@@ -67,16 +72,28 @@ func (s *service) UpdateRuntimeConfig(ctx context.Context, req *UpdateRuntimeCon
 		updates[KeyRuntimeCacheEnabled] = strconv.FormatBool(*req.CacheEnabled)
 	}
 	if req.CacheTTL != nil {
-		updates[KeyRuntimeCacheTTL] = strconv.Itoa(*req.CacheTTL)
+		// 将时间格式字符串转换为秒数
+		seconds, err := utils.ParseDuration(*req.CacheTTL)
+		if err != nil {
+			return nil, errors.NewValidationError("invalid cache_ttl format", map[string]string{
+				"cache_ttl": "must be in format like '24h', '1h30m', '30m'",
+			})
+		}
+		updates[KeyRuntimeCacheTTL] = strconv.Itoa(seconds)
 	}
-	if req.MaxRetries != nil {
-		updates[KeyRuntimeMaxRetries] = strconv.Itoa(*req.MaxRetries)
+	if req.SemanticCacheEnabled != nil {
+		updates[KeyRuntimeSemanticCacheEnabled] = strconv.FormatBool(*req.SemanticCacheEnabled)
 	}
-	if req.Timeout != nil {
-		updates[KeyRuntimeTimeout] = strconv.Itoa(*req.Timeout)
+	if req.SemanticThreshold != nil {
+		if *req.SemanticThreshold < 0 || *req.SemanticThreshold > 1 {
+			return nil, errors.NewValidationError("invalid semantic_threshold", map[string]string{
+				"semantic_threshold": "must be between 0.0 and 1.0",
+			})
+		}
+		updates[KeyRuntimeSemanticThreshold] = strconv.FormatFloat(*req.SemanticThreshold, 'f', 2, 64)
 	}
-	if req.EnableLoadBalance != nil {
-		updates[KeyRuntimeEnableLoadBalance] = strconv.FormatBool(*req.EnableLoadBalance)
+	if req.EmbeddingEnabled != nil {
+		updates[KeyRuntimeEmbeddingEnabled] = strconv.FormatBool(*req.EmbeddingEnabled)
 	}
 
 	if len(updates) > 0 {
@@ -88,13 +105,15 @@ func (s *service) UpdateRuntimeConfig(ctx context.Context, req *UpdateRuntimeCon
 	return s.GetRuntimeConfig(ctx)
 }
 
-// GetSystemConfig 获取系统配置
+// GetSystemConfig 获取系统运行信息
 func (s *service) GetSystemConfig(ctx context.Context) (*SystemConfigResponse, error) {
 	keys := []string{
-		KeySystemSiteName,
-		KeySystemSiteDescription,
-		KeySystemAdminEmail,
-		KeySystemMaintenanceMode,
+		KeyRuntimeCacheEnabled,
+		KeyRuntimeCacheTTL,
+		KeyRuntimeSemanticCacheEnabled,
+		KeyRuntimeSemanticThreshold,
+		KeyRuntimeEmbeddingEnabled,
+		KeyDefaultRateLimitPerMinute,
 	}
 
 	settings, err := s.repo.GetMultiple(ctx, keys)
@@ -102,11 +121,28 @@ func (s *service) GetSystemConfig(ctx context.Context) (*SystemConfigResponse, e
 		return nil, errors.Wrap(err, "failed to get system config")
 	}
 
+	// 将秒数转换为时间格式字符串
+	cacheTTLSeconds := s.getInt(settings, KeyRuntimeCacheTTL, 3600)
+	cacheTTL := utils.FormatDuration(cacheTTLSeconds)
+
+	// 获取速率限制配置
+	rateLimitPerMinute := s.getInt(settings, KeyDefaultRateLimitPerMinute, 60)
+
 	config := &SystemConfigResponse{
-		SiteName:        s.getString(settings, KeySystemSiteName, "API Aggregator"),
-		SiteDescription: s.getString(settings, KeySystemSiteDescription, "API Aggregator Platform"),
-		AdminEmail:      s.getString(settings, KeySystemAdminEmail, "admin@example.com"),
-		MaintenanceMode: s.getBool(settings, KeySystemMaintenanceMode, false),
+		// 缓存配置
+		CacheEnabled:         s.getBool(settings, KeyRuntimeCacheEnabled, true),
+		CacheTTL:             cacheTTL,
+		SemanticCacheEnabled: s.getBool(settings, KeyRuntimeSemanticCacheEnabled, false),
+		SemanticThreshold:    s.getFloat(settings, KeyRuntimeSemanticThreshold, 0.85),
+		EmbeddingEnabled:     s.getBool(settings, KeyRuntimeEmbeddingEnabled, false),
+		// 速率限制
+		RateLimitEnabled:  true,
+		RateLimitRequests: rateLimitPerMinute,
+		RateLimitWindow:   "1m",
+		// 服务信息
+		Version:   utils.GetVersion(),
+		Uptime:    utils.GetUptime(),
+		GoVersion: utils.GetGoVersion(),
 	}
 
 	return config, nil
@@ -146,8 +182,6 @@ func (s *service) UpdatePassword(ctx context.Context, userID uint, req *UpdatePa
 func (s *service) GetDefaultQuota(ctx context.Context) (*DefaultQuotaResponse, error) {
 	keys := []string{
 		KeyDefaultQuotaDaily,
-		KeyDefaultQuotaMonthly,
-		KeyDefaultQuotaTotal,
 	}
 
 	settings, err := s.repo.GetMultiple(ctx, keys)
@@ -156,9 +190,7 @@ func (s *service) GetDefaultQuota(ctx context.Context) (*DefaultQuotaResponse, e
 	}
 
 	quota := &DefaultQuotaResponse{
-		Daily:   s.getInt64(settings, KeyDefaultQuotaDaily, 1000),
-		Monthly: s.getInt64(settings, KeyDefaultQuotaMonthly, 30000),
-		Total:   s.getInt64(settings, KeyDefaultQuotaTotal, 100000),
+		DefaultQuota: s.getInt64(settings, KeyDefaultQuotaDaily, 100000),
 	}
 
 	return quota, nil
@@ -168,14 +200,8 @@ func (s *service) GetDefaultQuota(ctx context.Context) (*DefaultQuotaResponse, e
 func (s *service) UpdateDefaultQuota(ctx context.Context, req *UpdateDefaultQuotaRequest) (*DefaultQuotaResponse, error) {
 	updates := make(map[string]string)
 
-	if req.Daily != nil {
-		updates[KeyDefaultQuotaDaily] = strconv.FormatInt(*req.Daily, 10)
-	}
-	if req.Monthly != nil {
-		updates[KeyDefaultQuotaMonthly] = strconv.FormatInt(*req.Monthly, 10)
-	}
-	if req.Total != nil {
-		updates[KeyDefaultQuotaTotal] = strconv.FormatInt(*req.Total, 10)
+	if req.DefaultQuota != nil {
+		updates[KeyDefaultQuotaDaily] = strconv.FormatInt(*req.DefaultQuota, 10)
 	}
 
 	if len(updates) > 0 {
@@ -191,7 +217,6 @@ func (s *service) UpdateDefaultQuota(ctx context.Context, req *UpdateDefaultQuot
 func (s *service) GetDefaultRateLimit(ctx context.Context) (*DefaultRateLimitResponse, error) {
 	keys := []string{
 		KeyDefaultRateLimitPerMinute,
-		KeyDefaultRateLimitPerHour,
 		KeyDefaultRateLimitPerDay,
 	}
 
@@ -201,9 +226,8 @@ func (s *service) GetDefaultRateLimit(ctx context.Context) (*DefaultRateLimitRes
 	}
 
 	rateLimit := &DefaultRateLimitResponse{
-		PerMinute: s.getInt(settings, KeyDefaultRateLimitPerMinute, 60),
-		PerHour:   s.getInt(settings, KeyDefaultRateLimitPerHour, 3600),
-		PerDay:    s.getInt(settings, KeyDefaultRateLimitPerDay, 86400),
+		RequestsPerMinute: s.getInt(settings, KeyDefaultRateLimitPerMinute, 60),
+		RequestsPerDay:    s.getInt(settings, KeyDefaultRateLimitPerDay, 10000),
 	}
 
 	return rateLimit, nil
@@ -213,14 +237,11 @@ func (s *service) GetDefaultRateLimit(ctx context.Context) (*DefaultRateLimitRes
 func (s *service) UpdateDefaultRateLimit(ctx context.Context, req *UpdateDefaultRateLimitRequest) (*DefaultRateLimitResponse, error) {
 	updates := make(map[string]string)
 
-	if req.PerMinute != nil {
-		updates[KeyDefaultRateLimitPerMinute] = strconv.Itoa(*req.PerMinute)
+	if req.RequestsPerMinute != nil {
+		updates[KeyDefaultRateLimitPerMinute] = strconv.Itoa(*req.RequestsPerMinute)
 	}
-	if req.PerHour != nil {
-		updates[KeyDefaultRateLimitPerHour] = strconv.Itoa(*req.PerHour)
-	}
-	if req.PerDay != nil {
-		updates[KeyDefaultRateLimitPerDay] = strconv.Itoa(*req.PerDay)
+	if req.RequestsPerDay != nil {
+		updates[KeyDefaultRateLimitPerDay] = strconv.Itoa(*req.RequestsPerDay)
 	}
 
 	if len(updates) > 0 {
@@ -262,6 +283,15 @@ func (s *service) getInt64(settings map[string]*Setting, key string, defaultValu
 func (s *service) getBool(settings map[string]*Setting, key string, defaultValue bool) bool {
 	if setting, ok := settings[key]; ok {
 		if val, err := strconv.ParseBool(setting.Value); err == nil {
+			return val
+		}
+	}
+	return defaultValue
+}
+
+func (s *service) getFloat(settings map[string]*Setting, key string, defaultValue float64) float64 {
+	if setting, ok := settings[key]; ok {
+		if val, err := strconv.ParseFloat(setting.Value, 64); err == nil {
 			return val
 		}
 	}
