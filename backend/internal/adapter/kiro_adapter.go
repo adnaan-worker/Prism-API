@@ -156,24 +156,6 @@ func (a *KiroAdapter) Call(ctx context.Context, req *ChatRequest) (*ChatResponse
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	// Debug: log request summary
-	fmt.Printf("[Kiro] Request summary:\n")
-	fmt.Printf("  - Model: %s\n", req.Model)
-	if kiroReq.ConversationState.CurrentMessage.UserInputMessage != nil {
-		fmt.Printf("  - Kiro Model ID: %s\n", kiroReq.ConversationState.CurrentMessage.UserInputMessage.ModelID)
-		fmt.Printf("  - Content length: %d\n", len(kiroReq.ConversationState.CurrentMessage.UserInputMessage.Content))
-		if kiroReq.ConversationState.CurrentMessage.UserInputMessage.UserInputMessageContext != nil {
-			fmt.Printf("  - Tools count: %d\n", len(kiroReq.ConversationState.CurrentMessage.UserInputMessage.UserInputMessageContext.Tools))
-		} else {
-			fmt.Printf("  - Tools count: 0\n")
-		}
-	}
-	fmt.Printf("  - History length: %d\n", len(kiroReq.ConversationState.History))
-	fmt.Printf("  - Payload size: %d bytes\n", len(reqBody))
-	if len(reqBody) < 2000 {
-		fmt.Printf("  - Full payload: %s\n", string(reqBody))
-	}
-
 	// Create HTTP request
 	url := fmt.Sprintf("https://q.%s.amazonaws.com/generateAssistantResponse", a.region)
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(reqBody))
@@ -239,32 +221,6 @@ func (a *KiroAdapter) CallStream(ctx context.Context, req *ChatRequest) (*http.R
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	// Debug: log request summary
-	fmt.Printf("[Kiro Stream] Request summary:\n")
-	fmt.Printf("  - Model: %s\n", req.Model)
-	if kiroReq.ConversationState.CurrentMessage.UserInputMessage != nil {
-		fmt.Printf("  - Kiro Model ID: %s\n", kiroReq.ConversationState.CurrentMessage.UserInputMessage.ModelID)
-		fmt.Printf("  - Content length: %d\n", len(kiroReq.ConversationState.CurrentMessage.UserInputMessage.Content))
-		if kiroReq.ConversationState.CurrentMessage.UserInputMessage.UserInputMessageContext != nil {
-			fmt.Printf("  - Tools count: %d\n", len(kiroReq.ConversationState.CurrentMessage.UserInputMessage.UserInputMessageContext.Tools))
-		}
-	}
-	fmt.Printf("  - History length: %d\n", len(kiroReq.ConversationState.History))
-	fmt.Printf("  - Payload size: %d bytes\n", len(reqBody))
-	
-	// Save full payload to file for debugging
-	timestamp := time.Now().Format("20060102_150405")
-	filename := fmt.Sprintf("kiro_request_%s.json", timestamp)
-	if err := os.WriteFile(filename, reqBody, 0644); err == nil {
-		fmt.Printf("  - Full payload saved to: %s\n", filename)
-	}
-	
-	if len(reqBody) < 2000 {
-		fmt.Printf("  - Full payload: %s\n", string(reqBody))
-	} else {
-		fmt.Printf("  - Payload preview (first 1000 chars): %s...\n", string(reqBody[:1000]))
-	}
-
 	// Create HTTP request
 	url := fmt.Sprintf("https://q.%s.amazonaws.com/generateAssistantResponse", a.region)
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(reqBody))
@@ -286,7 +242,6 @@ func (a *KiroAdapter) CallStream(ctx context.Context, req *ChatRequest) (*http.R
 	if resp.StatusCode != http.StatusOK {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
-		fmt.Printf("[Kiro Stream] API error %d: %s\n", resp.StatusCode, string(respBody))
 		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(respBody))
 	}
 
@@ -408,7 +363,6 @@ func (a *KiroAdapter) convertRequest(req *ChatRequest) (*kiroRequest, error) {
 				if tc.Type == "function" {
 					var input map[string]interface{}
 					if err := json.Unmarshal([]byte(tc.Function.Arguments), &input); err != nil {
-						fmt.Printf("[Kiro] Warning: failed to parse tool arguments: %v\n", err)
 						input = make(map[string]interface{})
 					}
 					toolUses = append(toolUses, kiroToolUse{
@@ -984,10 +938,8 @@ func (a *KiroAdapter) parseEventStreamChunk(rawData []byte) (string, []ToolCall,
 								if err := json.Unmarshal([]byte(currentToolCall.Function.Arguments), &args); err == nil {
 									argsBytes, _ := json.Marshal(args)
 									currentToolCall.Function.Arguments = string(argsBytes)
-									fmt.Printf("[Kiro] Tool use completed: %s, args length: %d\n", currentToolCall.Function.Name, len(currentToolCall.Function.Arguments))
 								} else {
 									// If parsing fails, create error object
-									fmt.Printf("[Kiro] Failed to parse tool input: %v, Buffer: %s\n", err, currentToolCall.Function.Arguments[:min(100, len(currentToolCall.Function.Arguments))])
 									errorObj := map[string]interface{}{
 										"_error":        "Tool input truncated by Kiro API (output token limit exceeded)",
 										"_partialInput": currentToolCall.Function.Arguments[:min(500, len(currentToolCall.Function.Arguments))],
@@ -1263,7 +1215,6 @@ func (a *KiroAdapter) streamEventStreamToSSE(eventStreamBody io.Reader, sseWrite
 										name:       name,
 										argsBuffer: "",
 									}
-									fmt.Printf("[Kiro Stream] New tool use: %s (ID: %s)\n", name, toolUseID)
 								}
 								
 								state := currentToolUse[toolUseID]
@@ -1271,12 +1222,10 @@ func (a *KiroAdapter) streamEventStreamToSSE(eventStreamBody io.Reader, sseWrite
 								// Accumulate input fragments
 								if input, hasInput := actualEvent["input"].(string); hasInput {
 									state.argsBuffer += input
-									fmt.Printf("[Kiro Stream] Accumulated input fragment for %s: %d bytes total\n", name, len(state.argsBuffer))
 								} else if inputObj, hasInputObj := actualEvent["input"].(map[string]interface{}); hasInputObj {
 									// Complete input object provided
 									inputBytes, _ := json.Marshal(inputObj)
 									state.argsBuffer = string(inputBytes)
-									fmt.Printf("[Kiro Stream] Complete input object for %s: %d bytes\n", name, len(state.argsBuffer))
 								}
 								
 								// Check if tool use is complete
@@ -1289,10 +1238,8 @@ func (a *KiroAdapter) streamEventStreamToSSE(eventStreamBody io.Reader, sseWrite
 										if err := json.Unmarshal([]byte(state.argsBuffer), &args); err == nil {
 											argsBytes, _ := json.Marshal(args)
 											finalArgs = string(argsBytes)
-											fmt.Printf("[Kiro Stream] Tool use completed: %s, args: %s\n", name, finalArgs)
 										} else {
 											// Parsing failed - create error object
-											fmt.Printf("[Kiro Stream] Failed to parse tool input for %s: %v\n", name, err)
 											errorObj := map[string]interface{}{
 												"_error":        "Tool input parsing failed",
 												"_partialInput": state.argsBuffer[:min(500, len(state.argsBuffer))],
