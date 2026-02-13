@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -66,7 +67,14 @@ func (a *KiroAdapter) GetType() string {
 // Kiro request/response structures
 type kiroRequest struct {
 	ConversationState kiroConversationState `json:"conversationState"`
-	ProfileArn        string                `json:"profileArn,omitempty"` // Required for Social Auth
+	ProfileArn        string                `json:"profileArn,omitempty"`        // Required for Social Auth
+	InferenceConfig   *kiroInferenceConfig  `json:"inferenceConfig,omitempty"`   // Optional inference parameters
+}
+
+type kiroInferenceConfig struct {
+	MaxTokens   int     `json:"maxTokens,omitempty"`
+	Temperature float64 `json:"temperature,omitempty"`
+	TopP        float64 `json:"topP,omitempty"`
 }
 
 type kiroConversationState struct {
@@ -119,9 +127,13 @@ type kiroToolUse struct {
 }
 
 type kiroToolResult struct {
-	ToolUseID string                   `json:"toolUseId"`
-	Status    string                   `json:"status"`
-	Content   []map[string]interface{} `json:"content"`
+	ToolUseID string                  `json:"toolUseId"`
+	Status    string                  `json:"status"`
+	Content   []kiroToolResultContent `json:"content"`
+}
+
+type kiroToolResultContent struct {
+	Text string `json:"text"`
 }
 
 type kiroResponse struct {
@@ -142,6 +154,24 @@ func (a *KiroAdapter) Call(ctx context.Context, req *ChatRequest) (*ChatResponse
 	reqBody, err := json.Marshal(kiroReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	// Debug: log request summary
+	fmt.Printf("[Kiro] Request summary:\n")
+	fmt.Printf("  - Model: %s\n", req.Model)
+	if kiroReq.ConversationState.CurrentMessage.UserInputMessage != nil {
+		fmt.Printf("  - Kiro Model ID: %s\n", kiroReq.ConversationState.CurrentMessage.UserInputMessage.ModelID)
+		fmt.Printf("  - Content length: %d\n", len(kiroReq.ConversationState.CurrentMessage.UserInputMessage.Content))
+		if kiroReq.ConversationState.CurrentMessage.UserInputMessage.UserInputMessageContext != nil {
+			fmt.Printf("  - Tools count: %d\n", len(kiroReq.ConversationState.CurrentMessage.UserInputMessage.UserInputMessageContext.Tools))
+		} else {
+			fmt.Printf("  - Tools count: 0\n")
+		}
+	}
+	fmt.Printf("  - History length: %d\n", len(kiroReq.ConversationState.History))
+	fmt.Printf("  - Payload size: %d bytes\n", len(reqBody))
+	if len(reqBody) < 2000 {
+		fmt.Printf("  - Full payload: %s\n", string(reqBody))
 	}
 
 	// Create HTTP request
@@ -180,6 +210,7 @@ func (a *KiroAdapter) Call(ctx context.Context, req *ChatRequest) (*ChatResponse
 
 	// Check status code
 	if resp.StatusCode != http.StatusOK {
+		fmt.Printf("[Kiro] API error %d: %s\n", resp.StatusCode, string(respBody))
 		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(respBody))
 	}
 
@@ -208,6 +239,32 @@ func (a *KiroAdapter) CallStream(ctx context.Context, req *ChatRequest) (*http.R
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
+	// Debug: log request summary
+	fmt.Printf("[Kiro Stream] Request summary:\n")
+	fmt.Printf("  - Model: %s\n", req.Model)
+	if kiroReq.ConversationState.CurrentMessage.UserInputMessage != nil {
+		fmt.Printf("  - Kiro Model ID: %s\n", kiroReq.ConversationState.CurrentMessage.UserInputMessage.ModelID)
+		fmt.Printf("  - Content length: %d\n", len(kiroReq.ConversationState.CurrentMessage.UserInputMessage.Content))
+		if kiroReq.ConversationState.CurrentMessage.UserInputMessage.UserInputMessageContext != nil {
+			fmt.Printf("  - Tools count: %d\n", len(kiroReq.ConversationState.CurrentMessage.UserInputMessage.UserInputMessageContext.Tools))
+		}
+	}
+	fmt.Printf("  - History length: %d\n", len(kiroReq.ConversationState.History))
+	fmt.Printf("  - Payload size: %d bytes\n", len(reqBody))
+	
+	// Save full payload to file for debugging
+	timestamp := time.Now().Format("20060102_150405")
+	filename := fmt.Sprintf("kiro_request_%s.json", timestamp)
+	if err := os.WriteFile(filename, reqBody, 0644); err == nil {
+		fmt.Printf("  - Full payload saved to: %s\n", filename)
+	}
+	
+	if len(reqBody) < 2000 {
+		fmt.Printf("  - Full payload: %s\n", string(reqBody))
+	} else {
+		fmt.Printf("  - Payload preview (first 1000 chars): %s...\n", string(reqBody[:1000]))
+	}
+
 	// Create HTTP request
 	url := fmt.Sprintf("https://q.%s.amazonaws.com/generateAssistantResponse", a.region)
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(reqBody))
@@ -229,6 +286,7 @@ func (a *KiroAdapter) CallStream(ctx context.Context, req *ChatRequest) (*http.R
 	if resp.StatusCode != http.StatusOK {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
+		fmt.Printf("[Kiro Stream] API error %d: %s\n", resp.StatusCode, string(respBody))
 		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(respBody))
 	}
 
@@ -264,6 +322,7 @@ func (a *KiroAdapter) CallStream(ctx context.Context, req *ChatRequest) (*http.R
 }
 
 // convertRequest converts unified ChatRequest to Kiro format
+// Following Kiro-account-manager implementation exactly
 func (a *KiroAdapter) convertRequest(req *ChatRequest) (*kiroRequest, error) {
 	conversationID := uuid.New().String()
 
@@ -274,88 +333,193 @@ func (a *KiroAdapter) convertRequest(req *ChatRequest) (*kiroRequest, error) {
 		kiroModelID = req.Model
 	}
 
-	// Extract system prompt and process messages
+	origin := "AI_EDITOR"
+
+	// Extract system prompt
 	var systemPrompt string
-	var history []kiroMessage
-	var currentUserContent string
+	var nonSystemMessages []Message
 
-	// Process messages
-	for i, msg := range req.Messages {
+	for _, msg := range req.Messages {
 		if msg.Role == "system" {
-			systemPrompt = msg.Content
-			continue
-		}
-
-		// Last user message becomes currentMessage
-		if msg.Role == "user" && i == len(req.Messages)-1 {
-			currentUserContent = msg.Content
+			if systemPrompt != "" {
+				systemPrompt += "\n"
+			}
+			systemPrompt += msg.Content
 		} else {
-			// Add to history
-			if msg.Role == "user" {
-				content := msg.Content
-				// Prepend system prompt to first user message in history
-				if systemPrompt != "" && len(history) == 0 {
-					content = systemPrompt + "\n\n" + content
-					systemPrompt = "" // Only add once
+			nonSystemMessages = append(nonSystemMessages, msg)
+		}
+	}
+
+	// Inject timestamp
+	timestamp := time.Now().Format(time.RFC3339)
+	systemPrompt = fmt.Sprintf("[Context: Current time is %s]\n\n%s", timestamp, systemPrompt)
+
+	// Inject execution directive (prevent AI from losing focus)
+	executionDirective := `
+<execution_discipline>
+当用户要求执行特定任务时，你必须遵循以下纪律：
+1. **目标锁定**：在整个会话中始终牢记用户的原始目标，不要在代码探索过程中迷失方向
+2. **行动优先**：优先执行任务而非仅分析或总结，除非用户明确只要求分析
+3. **计划执行**：为任务创建明确的步骤计划，逐步执行并标记完成状态
+4. **禁止确认性收尾**：在任务未完成前，禁止输出"需要我继续吗？"、"需要深入分析吗？"等确认性问题
+5. **持续推进**：如果发现部分任务已完成，立即继续执行剩余未完成的任务
+6. **完整交付**：直到所有任务步骤都执行完毕才算完成
+</execution_discipline>
+`
+	systemPrompt = systemPrompt + "\n\n" + executionDirective
+
+	// Build history messages - collect all messages first
+	var allMessages []kiroMessage
+	var pendingToolResults []kiroToolResult
+	systemPromptMerged := false
+
+	for i, msg := range nonSystemMessages {
+		if msg.Role == "user" {
+			userContent := msg.Content
+
+			// Merge system prompt into first user message
+			if !systemPromptMerged && systemPrompt != "" {
+				userContent = fmt.Sprintf("%s\n\n%s", systemPrompt, userContent)
+				systemPromptMerged = true
+			}
+
+			if userContent == "" {
+				userContent = "Continue"
+			}
+
+			allMessages = append(allMessages, kiroMessage{
+				UserInputMessage: &kiroUserMessage{
+					Content: userContent,
+					ModelID: kiroModelID,
+					Origin:  origin,
+				},
+			})
+		} else if msg.Role == "assistant" {
+			// Kiro API requires content to be non-empty
+			assistantContent := msg.Content
+			if assistantContent == "" && len(msg.ToolCalls) > 0 {
+				assistantContent = "Using tools."
+			} else if assistantContent == "" {
+				assistantContent = "I understand."
+			}
+
+			var toolUses []kiroToolUse
+			for _, tc := range msg.ToolCalls {
+				if tc.Type == "function" {
+					var input map[string]interface{}
+					if err := json.Unmarshal([]byte(tc.Function.Arguments), &input); err != nil {
+						fmt.Printf("[Kiro] Warning: failed to parse tool arguments: %v\n", err)
+						input = make(map[string]interface{})
+					}
+					toolUses = append(toolUses, kiroToolUse{
+						ToolUseID: tc.ID,
+						Name:      tc.Function.Name,
+						Input:     input,
+					})
 				}
-				history = append(history, kiroMessage{
+			}
+
+			allMessages = append(allMessages, kiroMessage{
+				AssistantResponseMessage: &kiroAssistantMessage{
+					Content:  assistantContent,
+					ToolUses: toolUses,
+				},
+			})
+		} else if msg.Role == "tool" {
+			// Tool result - collect for processing
+			if msg.ToolCallID != "" {
+				pendingToolResults = append(pendingToolResults, kiroToolResult{
+					ToolUseID: msg.ToolCallID,
+					Content: []kiroToolResultContent{
+						{Text: msg.Content},
+					},
+					Status: "success",
+				})
+			}
+
+			// Check if next message is also a tool message
+			var nextMsg *Message
+			if i+1 < len(nonSystemMessages) {
+				nextMsg = &nonSystemMessages[i+1]
+			}
+			shouldFlush := nextMsg == nil || nextMsg.Role != "tool"
+
+			// Flush tool results as a user message if needed
+			if shouldFlush && len(pendingToolResults) > 0 {
+				allMessages = append(allMessages, kiroMessage{
 					UserInputMessage: &kiroUserMessage{
-						Content: content,
+						Content: "Tool results provided.",
 						ModelID: kiroModelID,
-						Origin:  "AI_EDITOR",
+						Origin:  origin,
+						UserInputMessageContext: &kiroMessageContext{
+							ToolResults: pendingToolResults,
+						},
 					},
 				})
-			} else if msg.Role == "assistant" {
-				history = append(history, kiroMessage{
-					AssistantResponseMessage: &kiroAssistantMessage{
-						Content: msg.Content,
-					},
-				})
+				pendingToolResults = nil
 			}
 		}
 	}
 
-	// Kiro API requires history to end with assistantResponseMessage
-	if len(history) > 0 {
-		lastMsg := history[len(history)-1]
-		if lastMsg.AssistantResponseMessage == nil {
-			// Add empty assistant message
-			history = append(history, kiroMessage{
-				AssistantResponseMessage: &kiroAssistantMessage{
-					Content: "Continue",
-				},
-			})
+	// Sanitize conversation (ensure proper alternation and structure)
+	sanitized := sanitizeConversation(allMessages, kiroModelID, origin)
+
+	// Split into history and currentMessage
+	// currentMessage is the last message, history is everything before
+	var history []kiroMessage
+	var currentMsg kiroMessage
+
+	if len(sanitized) > 0 {
+		history = sanitized[:len(sanitized)-1]
+		currentMsg = sanitized[len(sanitized)-1]
+	} else {
+		// No messages - create a default current message
+		currentMsg = kiroMessage{
+			UserInputMessage: &kiroUserMessage{
+				Content: "Continue.",
+				ModelID: kiroModelID,
+				Origin:  origin,
+			},
 		}
 	}
 
-	// Prepend system prompt to current message if not added to history
-	if systemPrompt != "" {
-		currentUserContent = systemPrompt + "\n\n" + currentUserContent
+	// Ensure currentMessage is a user message (required by Kiro API)
+	if currentMsg.UserInputMessage == nil {
+		// Last message is assistant - add a Continue message
+		history = append(history, currentMsg)
+		currentMsg = kiroMessage{
+			UserInputMessage: &kiroUserMessage{
+				Content: "Continue.",
+				ModelID: kiroModelID,
+				Origin:  origin,
+			},
+		}
 	}
 
-	// Ensure current content is not empty
-	if currentUserContent == "" {
-		currentUserContent = "Continue"
+	// If system prompt not merged yet, add to current message
+	if !systemPromptMerged && systemPrompt != "" {
+		currentMsg.UserInputMessage.Content = fmt.Sprintf("%s\n\n%s", systemPrompt, currentMsg.UserInputMessage.Content)
 	}
 
-	// Build current message
-	currentMsg := kiroMessage{
-		UserInputMessage: &kiroUserMessage{
-			Content: currentUserContent,
-			ModelID: kiroModelID,
-			Origin:  "AI_EDITOR",
-		},
-	}
-
-	// Build tools context
+	// Convert tools
 	var kiroTools []kiroTool
 	if len(req.Tools) > 0 {
 		kiroTools = make([]kiroTool, 0, len(req.Tools))
 		for _, tool := range req.Tools {
+			description := tool.Function.Description
+			if description == "" {
+				description = fmt.Sprintf("Tool: %s", tool.Function.Name)
+			}
+			// Truncate long descriptions
+			const maxDescLen = 10237
+			if len(description) > maxDescLen {
+				description = description[:maxDescLen] + "..."
+			}
+
 			kiroTools = append(kiroTools, kiroTool{
 				ToolSpecification: kiroToolSpec{
-					Name:        tool.Function.Name,
-					Description: tool.Function.Description,
+					Name:        shortenToolName(tool.Function.Name),
+					Description: description,
 					InputSchema: kiroInputSchema{
 						JSON: tool.Function.Parameters,
 					},
@@ -364,11 +528,12 @@ func (a *KiroAdapter) convertRequest(req *ChatRequest) (*kiroRequest, error) {
 		}
 	}
 
-	// Always add userInputMessageContext if tools are present
+	// Add tools to current message context (tools only go in currentMessage)
 	if len(kiroTools) > 0 {
-		currentMsg.UserInputMessage.UserInputMessageContext = &kiroMessageContext{
-			Tools: kiroTools,
+		if currentMsg.UserInputMessage.UserInputMessageContext == nil {
+			currentMsg.UserInputMessage.UserInputMessageContext = &kiroMessageContext{}
 		}
+		currentMsg.UserInputMessage.UserInputMessageContext.Tools = kiroTools
 	}
 
 	// Build request
@@ -386,7 +551,256 @@ func (a *KiroAdapter) convertRequest(req *ChatRequest) (*kiroRequest, error) {
 		kiroReq.ProfileArn = a.profileArn
 	}
 
+	// Add inference config
+	if req.MaxTokens > 0 || req.Temperature > 0 || req.TopP > 0 {
+		kiroReq.InferenceConfig = &kiroInferenceConfig{}
+		if req.MaxTokens > 0 {
+			kiroReq.InferenceConfig.MaxTokens = req.MaxTokens
+		}
+		if req.Temperature > 0 {
+			kiroReq.InferenceConfig.Temperature = req.Temperature
+		}
+		if req.TopP > 0 {
+			kiroReq.InferenceConfig.TopP = req.TopP
+		}
+	}
+
 	return kiroReq, nil
+}
+
+// sanitizeConversation ensures proper message alternation and structure
+// Following Kiro-account-manager implementation
+func sanitizeConversation(messages []kiroMessage, modelID, origin string) []kiroMessage {
+	if len(messages) == 0 {
+		return []kiroMessage{
+			{
+				UserInputMessage: &kiroUserMessage{
+					Content: "Hello",
+					ModelID: modelID,
+					Origin:  origin,
+				},
+			},
+		}
+	}
+
+	// Step 1: Ensure starts with user message
+	sanitized := ensureStartsWithUserMessage(messages, modelID, origin)
+
+	// Step 2: Remove empty user messages (except first)
+	sanitized = removeEmptyUserMessages(sanitized)
+
+	// Step 3: Ensure valid tool uses and results
+	sanitized = ensureValidToolUsesAndResults(sanitized, modelID, origin)
+
+	// Step 4: Ensure alternating messages
+	sanitized = ensureAlternatingMessages(sanitized, modelID, origin)
+
+	// Step 5: Ensure ends with user message
+	sanitized = ensureEndsWithUserMessage(sanitized, modelID, origin)
+
+	return sanitized
+}
+
+// ensureStartsWithUserMessage ensures conversation starts with user message
+func ensureStartsWithUserMessage(messages []kiroMessage, modelID, origin string) []kiroMessage {
+	if len(messages) == 0 || messages[0].UserInputMessage != nil {
+		return messages
+	}
+
+	// Prepend a hello message
+	hello := kiroMessage{
+		UserInputMessage: &kiroUserMessage{
+			Content: "Hello",
+			ModelID: modelID,
+			Origin:  origin,
+		},
+	}
+	return append([]kiroMessage{hello}, messages...)
+}
+
+// ensureEndsWithUserMessage ensures conversation ends with user message
+func ensureEndsWithUserMessage(messages []kiroMessage, modelID, origin string) []kiroMessage {
+	if len(messages) == 0 {
+		return []kiroMessage{
+			{
+				UserInputMessage: &kiroUserMessage{
+					Content: "Hello",
+					ModelID: modelID,
+					Origin:  origin,
+				},
+			},
+		}
+	}
+
+	if messages[len(messages)-1].UserInputMessage != nil {
+		return messages
+	}
+
+	// Append a continue message
+	cont := kiroMessage{
+		UserInputMessage: &kiroUserMessage{
+			Content: "Continue",
+			ModelID: modelID,
+			Origin:  origin,
+		},
+	}
+	return append(messages, cont)
+}
+
+// ensureAlternatingMessages ensures messages alternate between user and assistant
+func ensureAlternatingMessages(messages []kiroMessage, modelID, origin string) []kiroMessage {
+	if len(messages) <= 1 {
+		return messages
+	}
+
+	result := []kiroMessage{messages[0]}
+	for i := 1; i < len(messages); i++ {
+		prevMsg := result[len(result)-1]
+		currentMsg := messages[i]
+
+		// Check if both are user messages
+		if prevMsg.UserInputMessage != nil && currentMsg.UserInputMessage != nil {
+			// Insert understood message
+			result = append(result, kiroMessage{
+				AssistantResponseMessage: &kiroAssistantMessage{
+					Content: "understood",
+				},
+			})
+		} else if prevMsg.AssistantResponseMessage != nil && currentMsg.AssistantResponseMessage != nil {
+			// Insert continue message
+			result = append(result, kiroMessage{
+				UserInputMessage: &kiroUserMessage{
+					Content: "Continue",
+					ModelID: modelID,
+					Origin:  origin,
+				},
+			})
+		}
+
+		result = append(result, currentMsg)
+	}
+
+	return result
+}
+
+// ensureValidToolUsesAndResults ensures tool uses have corresponding results
+func ensureValidToolUsesAndResults(messages []kiroMessage, modelID, origin string) []kiroMessage {
+	result := make([]kiroMessage, 0, len(messages))
+
+	for i := 0; i < len(messages); i++ {
+		msg := messages[i]
+		result = append(result, msg)
+
+		// Check if this is an assistant message with tool uses
+		if msg.AssistantResponseMessage != nil && len(msg.AssistantResponseMessage.ToolUses) > 0 {
+			// Check if next message has tool results
+			var nextMsg *kiroMessage
+			if i+1 < len(messages) {
+				nextMsg = &messages[i+1]
+			}
+
+			hasToolResults := nextMsg != nil &&
+				nextMsg.UserInputMessage != nil &&
+				nextMsg.UserInputMessage.UserInputMessageContext != nil &&
+				len(nextMsg.UserInputMessage.UserInputMessageContext.ToolResults) > 0
+
+			if !hasToolResults {
+				// No tool results - add failed tool results
+				toolUseIDs := make([]string, len(msg.AssistantResponseMessage.ToolUses))
+				for j, tu := range msg.AssistantResponseMessage.ToolUses {
+					toolUseIDs[j] = tu.ToolUseID
+				}
+
+				failedResults := make([]kiroToolResult, len(toolUseIDs))
+				for j, id := range toolUseIDs {
+					failedResults[j] = kiroToolResult{
+						ToolUseID: id,
+						Content: []kiroToolResultContent{
+							{Text: "Tool execution failed"},
+						},
+						Status: "error",
+					}
+				}
+
+				result = append(result, kiroMessage{
+					UserInputMessage: &kiroUserMessage{
+						Content: "",
+						ModelID: modelID,
+						Origin:  origin,
+						UserInputMessageContext: &kiroMessageContext{
+							ToolResults: failedResults,
+						},
+					},
+				})
+			}
+		}
+	}
+
+	return result
+}
+
+// removeEmptyUserMessages removes empty user messages (except first)
+func removeEmptyUserMessages(messages []kiroMessage) []kiroMessage {
+	if len(messages) <= 1 {
+		return messages
+	}
+
+	firstUserIdx := -1
+	for i, msg := range messages {
+		if msg.UserInputMessage != nil {
+			firstUserIdx = i
+			break
+		}
+	}
+
+	result := make([]kiroMessage, 0, len(messages))
+	for i, msg := range messages {
+		// Keep assistant messages
+		if msg.AssistantResponseMessage != nil {
+			result = append(result, msg)
+			continue
+		}
+
+		// Keep first user message
+		if i == firstUserIdx {
+			result = append(result, msg)
+			continue
+		}
+
+		// Keep user messages with content or tool results
+		if msg.UserInputMessage != nil {
+			hasContent := strings.TrimSpace(msg.UserInputMessage.Content) != ""
+			hasToolResults := msg.UserInputMessage.UserInputMessageContext != nil &&
+				len(msg.UserInputMessage.UserInputMessageContext.ToolResults) > 0
+
+			if hasContent || hasToolResults {
+				result = append(result, msg)
+			}
+		}
+	}
+
+	return result
+}
+
+// shortenToolName shortens tool names that are too long
+func shortenToolName(name string) string {
+	const limit = 64
+	if len(name) <= limit {
+		return name
+	}
+
+	// MCP tools: mcp__server__tool -> mcp__tool
+	if strings.HasPrefix(name, "mcp__") {
+		lastIdx := strings.LastIndex(name, "__")
+		if lastIdx > 5 {
+			shortened := "mcp__" + name[lastIdx+2:]
+			if len(shortened) <= limit {
+				return shortened
+			}
+		}
+	}
+
+	return name[:limit]
 }
 
 // convertResponse converts Kiro response to unified format
@@ -760,6 +1174,14 @@ func (a *KiroAdapter) streamEventStreamToSSE(eventStreamBody io.Reader, sseWrite
 	buffer := make([]byte, 0)
 	readBuf := make([]byte, 4096)
 	chunkID := 0
+	
+	// Track tool use state for accumulating input fragments
+	type toolUseState struct {
+		id        string
+		name      string
+		argsBuffer string
+	}
+	currentToolUse := make(map[string]*toolUseState) // key: toolUseId
 
 	for {
 		n, err := eventStreamBody.Read(readBuf)
@@ -834,14 +1256,52 @@ func (a *KiroAdapter) streamEventStreamToSSE(eventStreamBody io.Reader, sseWrite
 						// Handle tool use events
 						if name, hasName := actualEvent["name"].(string); hasName {
 							if toolUseID, hasID := actualEvent["toolUseId"].(string); hasID {
+								// Initialize or get existing tool use state
+								if _, exists := currentToolUse[toolUseID]; !exists {
+									currentToolUse[toolUseID] = &toolUseState{
+										id:         toolUseID,
+										name:       name,
+										argsBuffer: "",
+									}
+									fmt.Printf("[Kiro Stream] New tool use: %s (ID: %s)\n", name, toolUseID)
+								}
+								
+								state := currentToolUse[toolUseID]
+								
+								// Accumulate input fragments
+								if input, hasInput := actualEvent["input"].(string); hasInput {
+									state.argsBuffer += input
+									fmt.Printf("[Kiro Stream] Accumulated input fragment for %s: %d bytes total\n", name, len(state.argsBuffer))
+								} else if inputObj, hasInputObj := actualEvent["input"].(map[string]interface{}); hasInputObj {
+									// Complete input object provided
+									inputBytes, _ := json.Marshal(inputObj)
+									state.argsBuffer = string(inputBytes)
+									fmt.Printf("[Kiro Stream] Complete input object for %s: %d bytes\n", name, len(state.argsBuffer))
+								}
+								
+								// Check if tool use is complete
 								if stop, hasStop := actualEvent["stop"].(bool); hasStop && stop {
-									// Tool use complete - send tool call chunk
-									var inputArgs string
-									if input, hasInput := actualEvent["input"].(string); hasInput {
-										inputArgs = input
-									} else if inputObj, hasInputObj := actualEvent["input"].(map[string]interface{}); hasInputObj {
-										inputBytes, _ := json.Marshal(inputObj)
-										inputArgs = string(inputBytes)
+									// Tool use complete - validate and send
+									var finalArgs string
+									if state.argsBuffer != "" {
+										// Try to parse and validate JSON
+										var args map[string]interface{}
+										if err := json.Unmarshal([]byte(state.argsBuffer), &args); err == nil {
+											argsBytes, _ := json.Marshal(args)
+											finalArgs = string(argsBytes)
+											fmt.Printf("[Kiro Stream] Tool use completed: %s, args: %s\n", name, finalArgs)
+										} else {
+											// Parsing failed - create error object
+											fmt.Printf("[Kiro Stream] Failed to parse tool input for %s: %v\n", name, err)
+											errorObj := map[string]interface{}{
+												"_error":        "Tool input parsing failed",
+												"_partialInput": state.argsBuffer[:min(500, len(state.argsBuffer))],
+											}
+											argsBytes, _ := json.Marshal(errorObj)
+											finalArgs = string(argsBytes)
+										}
+									} else {
+										finalArgs = "{}"
 									}
 
 									chunkID++
@@ -860,7 +1320,7 @@ func (a *KiroAdapter) streamEventStreamToSSE(eventStreamBody io.Reader, sseWrite
 															Type: "function",
 															Function: FunctionCall{
 																Name:      name,
-																Arguments: inputArgs,
+																Arguments: finalArgs,
 															},
 														},
 													},
@@ -872,6 +1332,9 @@ func (a *KiroAdapter) streamEventStreamToSSE(eventStreamBody io.Reader, sseWrite
 
 									chunkJSON, _ := json.Marshal(chunk)
 									fmt.Fprintf(sseWriter, "data: %s\n\n", string(chunkJSON))
+									
+									// Clean up completed tool use
+									delete(currentToolUse, toolUseID)
 								}
 							}
 						}
