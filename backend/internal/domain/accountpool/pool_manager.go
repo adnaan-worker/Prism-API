@@ -267,7 +267,16 @@ func (pm *PoolManager) RecordSuccess(ctx context.Context, credID uint) {
 	}
 
 	cred.IncrementRequests()
-	cred.UpdateHealthStatus(HealthStatusHealthy)
+	cred.LastError = "" // 清除错误信息
+	
+	// 如果之前是不健康状态，且错误率已经降低，恢复为健康状态
+	if cred.HealthStatus == HealthStatusUnhealthy && cred.GetErrorRate() < 0.3 {
+		cred.UpdateHealthStatus(HealthStatusHealthy)
+	} else if cred.HealthStatus == HealthStatusUnknown {
+		// 首次成功请求，标记为健康
+		cred.UpdateHealthStatus(HealthStatusHealthy)
+	}
+	
 	pm.repo.UpdateCredential(ctx, cred)
 }
 
@@ -280,9 +289,11 @@ func (pm *PoolManager) RecordError(ctx context.Context, credID uint, errMsg stri
 
 	cred.IncrementRequests()
 	cred.IncrementErrors()
+	cred.LastError = errMsg
 
-	// 如果错误率过高，标记为不健康
-	if cred.GetErrorRate() > 0.5 {
+	// 只有在错误率非常高时才标记为不健康（避免临时错误导致凭据被禁用）
+	// 并且至少要有 10 次请求才开始计算错误率
+	if cred.TotalRequests >= 10 && cred.GetErrorRate() > 0.8 {
 		cred.UpdateHealthStatus(HealthStatusUnhealthy)
 	}
 

@@ -519,11 +519,25 @@ func (a *KiroAdapter) parseEventStreamChunk(rawData []byte) (string, []ToolCall,
 						// New tool use starting
 						if currentToolCall == nil || currentToolCall.ID != toolUseID {
 							if currentToolCall != nil {
-								// Complete previous tool call
-								var args map[string]interface{}
-								if err := json.Unmarshal([]byte(currentToolCall.Function.Arguments), &args); err == nil {
-									argsBytes, _ := json.Marshal(args)
-									currentToolCall.Function.Arguments = string(argsBytes)
+								// Complete previous tool call - ensure valid JSON
+								if currentToolCall.Function.Arguments != "" {
+									// Try to parse and reformat to ensure valid JSON
+									var args map[string]interface{}
+									if err := json.Unmarshal([]byte(currentToolCall.Function.Arguments), &args); err == nil {
+										argsBytes, _ := json.Marshal(args)
+										currentToolCall.Function.Arguments = string(argsBytes)
+									} else {
+										// If parsing fails, create error object
+										fmt.Printf("[Kiro] Failed to parse tool input: %v, Buffer: %s\n", err, currentToolCall.Function.Arguments[:min(100, len(currentToolCall.Function.Arguments))])
+										errorObj := map[string]interface{}{
+											"_error":        "Tool input truncated by Kiro API (output token limit exceeded)",
+											"_partialInput": currentToolCall.Function.Arguments[:min(500, len(currentToolCall.Function.Arguments))],
+										}
+										argsBytes, _ := json.Marshal(errorObj)
+										currentToolCall.Function.Arguments = string(argsBytes)
+									}
+								} else {
+									currentToolCall.Function.Arguments = "{}"
 								}
 								toolCalls = append(toolCalls, *currentToolCall)
 							}
@@ -540,9 +554,10 @@ func (a *KiroAdapter) parseEventStreamChunk(rawData []byte) (string, []ToolCall,
 
 						// Accumulate input fragments
 						if input, hasInput := actualEvent["input"].(string); hasInput {
+							// Accumulate string fragments
 							currentToolCall.Function.Arguments += input
 						} else if inputObj, hasInputObj := actualEvent["input"].(map[string]interface{}); hasInputObj {
-							// Complete input object provided
+							// Complete input object provided - this is the final form
 							inputBytes, _ := json.Marshal(inputObj)
 							currentToolCall.Function.Arguments = string(inputBytes)
 						}
@@ -550,10 +565,24 @@ func (a *KiroAdapter) parseEventStreamChunk(rawData []byte) (string, []ToolCall,
 						// Check if tool use is complete
 						if stop, hasStop := actualEvent["stop"].(bool); hasStop && stop {
 							// Validate and format arguments as JSON
-							var args map[string]interface{}
-							if err := json.Unmarshal([]byte(currentToolCall.Function.Arguments), &args); err == nil {
-								argsBytes, _ := json.Marshal(args)
-								currentToolCall.Function.Arguments = string(argsBytes)
+							if currentToolCall.Function.Arguments != "" {
+								var args map[string]interface{}
+								if err := json.Unmarshal([]byte(currentToolCall.Function.Arguments), &args); err == nil {
+									argsBytes, _ := json.Marshal(args)
+									currentToolCall.Function.Arguments = string(argsBytes)
+									fmt.Printf("[Kiro] Tool use completed: %s, args length: %d\n", currentToolCall.Function.Name, len(currentToolCall.Function.Arguments))
+								} else {
+									// If parsing fails, create error object
+									fmt.Printf("[Kiro] Failed to parse tool input: %v, Buffer: %s\n", err, currentToolCall.Function.Arguments[:min(100, len(currentToolCall.Function.Arguments))])
+									errorObj := map[string]interface{}{
+										"_error":        "Tool input truncated by Kiro API (output token limit exceeded)",
+										"_partialInput": currentToolCall.Function.Arguments[:min(500, len(currentToolCall.Function.Arguments))],
+									}
+									argsBytes, _ := json.Marshal(errorObj)
+									currentToolCall.Function.Arguments = string(argsBytes)
+								}
+							} else {
+								currentToolCall.Function.Arguments = "{}"
 							}
 							toolCalls = append(toolCalls, *currentToolCall)
 							currentToolCall = nil
@@ -569,6 +598,19 @@ func (a *KiroAdapter) parseEventStreamChunk(rawData []byte) (string, []ToolCall,
 
 	// Add any incomplete tool call
 	if currentToolCall != nil {
+		// Ensure valid JSON for incomplete tool call
+		if currentToolCall.Function.Arguments != "" {
+			var args map[string]interface{}
+			if err := json.Unmarshal([]byte(currentToolCall.Function.Arguments), &args); err == nil {
+				argsBytes, _ := json.Marshal(args)
+				currentToolCall.Function.Arguments = string(argsBytes)
+			} else {
+				// If parsing fails, wrap in empty object
+				currentToolCall.Function.Arguments = "{}"
+			}
+		} else {
+			currentToolCall.Function.Arguments = "{}"
+		}
 		toolCalls = append(toolCalls, *currentToolCall)
 	}
 

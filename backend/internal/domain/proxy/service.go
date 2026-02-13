@@ -25,8 +25,15 @@ import (
 // Service 代理服务接口
 type Service interface {
 	ChatCompletions(ctx context.Context, req *ProxyRequest) (*adapter.ChatResponse, error)
-	ChatCompletionsStream(ctx context.Context, req *ProxyRequest) (*http.Response, error)
+	ChatCompletionsStream(ctx context.Context, req *ProxyRequest) (*StreamResponse, error)
 	SetEmbeddingClient(client *embedding.Client)
+}
+
+// StreamResponse 流式响应，包含响应体和元数据
+type StreamResponse struct {
+	Response     *http.Response
+	APIConfigID  uint
+	CredentialID uint
 }
 
 type service struct {
@@ -79,10 +86,17 @@ func (s *service) SetEmbeddingClient(client *embedding.Client) {
 func (s *service) ChatCompletions(ctx context.Context, req *ProxyRequest) (*adapter.ChatResponse, error) {
 	startTime := time.Now()
 	
+	s.logger.Info("=== Chat Completion Request Started ===",
+		logger.Uint("user_id", req.UserID),
+		logger.Uint("api_key_id", req.APIKeyID),
+		logger.String("model", req.Model))
+	
 	// 1. 检查配额
 	if err := s.checkQuota(ctx, req.UserID); err != nil {
+		s.logger.Error("Quota check failed", logger.Error(err))
 		return nil, err
 	}
+	s.logger.Info("✓ Quota check passed")
 
 	// 2. 生成缓存键
 	cacheKey := s.generateCacheKey(req.ChatRequest)
@@ -94,21 +108,25 @@ func (s *service) ChatCompletions(ctx context.Context, req *ProxyRequest) (*adap
 			s.logger.Warn("Failed to check cache", logger.Error(err))
 		} else if cachedResp != nil {
 			// 缓存命中
-			s.logger.Info("Cache hit",
-				logger.Uint("user_id", req.UserID),
-				logger.String("model", req.Model),
+			s.logger.Info("✓ Cache hit - returning cached response",
 				logger.String("cache_key", cacheKey))
 			
 			cachedResp.Cached = true
 			return cachedResp, nil
 		}
+		s.logger.Info("✓ Cache miss - proceeding with API call")
 	}
 
 	// 4. 选择 API 配置（负载均衡）
 	apiConfig, err := s.selectAPIConfig(ctx, req.Model)
 	if err != nil {
+		s.logger.Error("Failed to select API config", logger.Error(err))
 		return nil, err
 	}
+	s.logger.Info("✓ API config selected",
+		logger.Uint("config_id", apiConfig.ID),
+		logger.String("config_name", apiConfig.Name),
+		logger.String("config_type", apiConfig.ConfigType))
 
 	// 5. 验证定价策略是否存在（商用必须）
 	if err := s.validatePricing(ctx, apiConfig.ID, req.Model); err != nil {
@@ -118,6 +136,7 @@ func (s *service) ChatCompletions(ctx context.Context, req *ProxyRequest) (*adap
 			logger.Error(err))
 		return nil, errors.Wrap(err, 400001, "Pricing not configured for this model")
 	}
+	s.logger.Info("✓ Pricing validated")
 
 	// 6. 根据配置类型创建适配器
 	var adapterInstance adapter.Adapter
@@ -127,8 +146,10 @@ func (s *service) ChatCompletions(ctx context.Context, req *ProxyRequest) (*adap
 		// 直接调用
 		adapterInstance, err = s.adapterFactory.CreateAdapter(apiConfig)
 		if err != nil {
+			s.logger.Error("Failed to create adapter", logger.Error(err))
 			return nil, errors.Wrap(err, 500003, "Failed to create adapter")
 		}
+		s.logger.Info("✓ Direct adapter created")
 	} else if apiConfig.IsAccountPool() {
 		// 使用账号池
 		if apiConfig.AccountPoolID == nil {
@@ -138,6 +159,7 @@ func (s *service) ChatCompletions(ctx context.Context, req *ProxyRequest) (*adap
 		var poolAdapter interface{}
 		poolAdapter, credentialID, err = s.poolManager.GetAdapter(ctx, *apiConfig.AccountPoolID)
 		if err != nil {
+			s.logger.Error("Failed to get adapter from pool", logger.Error(err))
 			return nil, errors.Wrap(err, 500003, "Failed to get adapter from pool")
 		}
 		
@@ -147,11 +169,15 @@ func (s *service) ChatCompletions(ctx context.Context, req *ProxyRequest) (*adap
 		if !ok {
 			return nil, errors.New(500001, "Invalid adapter type from pool")
 		}
+		s.logger.Info("✓ Account pool adapter created",
+			logger.Uint("pool_id", *apiConfig.AccountPoolID),
+			logger.Uint("credential_id", credentialID))
 	} else {
 		return nil, errors.New(500001, "Invalid config type")
 	}
 
 	// 7. 调用上游 API
+	s.logger.Info("→ Calling upstream API...")
 	resp, err := adapterInstance.Call(ctx, req.ChatRequest)
 	if err != nil {
 		// 如果是账号池，记录错误
@@ -159,6 +185,7 @@ func (s *service) ChatCompletions(ctx context.Context, req *ProxyRequest) (*adap
 			s.poolManager.RecordError(ctx, credentialID, err.Error())
 		}
 		
+		s.logger.Error("✗ Upstream API call failed", logger.Error(err))
 		// 记录失败日志
 		s.logRequest(ctx, req, apiConfig.ID, 0, time.Since(startTime), err)
 		return nil, errors.Wrap(err, 500004, "Failed to call upstream API")
@@ -168,11 +195,17 @@ func (s *service) ChatCompletions(ctx context.Context, req *ProxyRequest) (*adap
 	if apiConfig.IsAccountPool() && credentialID > 0 {
 		s.poolManager.RecordSuccess(ctx, credentialID)
 	}
+	
+	s.logger.Info("✓ Upstream API call succeeded",
+		logger.Int("prompt_tokens", resp.Usage.PromptTokens),
+		logger.Int("completion_tokens", resp.Usage.CompletionTokens),
+		logger.Int("total_tokens", resp.Usage.TotalTokens))
 
 	// 8. 计算费用并扣除配额（必须成功）
+	s.logger.Info("→ Calculating cost and deducting quota...")
 	cost, err := s.calculateAndDeductCost(ctx, req.UserID, apiConfig.ID, req.Model, resp.Usage)
 	if err != nil {
-		s.logger.Error("Failed to calculate and deduct cost",
+		s.logger.Error("✗ CRITICAL: Failed to calculate and deduct cost",
 			logger.Uint("user_id", req.UserID),
 			logger.String("model", req.Model),
 			logger.Error(err))
@@ -184,51 +217,82 @@ func (s *service) ChatCompletions(ctx context.Context, req *ProxyRequest) (*adap
 			logger.String("model", req.Model),
 			logger.Int("prompt_tokens", resp.Usage.PromptTokens),
 			logger.Int("completion_tokens", resp.Usage.CompletionTokens))
+	} else {
+		s.logger.Info("✓ Cost calculated and quota deducted",
+			logger.Int("cost", cost))
+	}
+
+	// 8.5. 记录成功（如果使用账号池）
+	if apiConfig.IsAccountPool() && credentialID > 0 {
+		s.poolManager.RecordSuccess(ctx, credentialID)
+		s.logger.Info("✓ Credential success recorded", logger.Uint("credential_id", credentialID))
 	}
 
 	// 9. 记录请求日志
+	s.logger.Info("→ Creating request log...")
 	s.logRequest(ctx, req, apiConfig.ID, resp.Usage.TotalTokens, time.Since(startTime), nil)
+	s.logger.Info("✓ Request log created")
 
 	// 10. 存储到缓存
 	if s.runtimeConfig.Get().IsCacheEnabled() && !req.Stream {
 		go s.storeCache(context.Background(), req.UserID, req.Model, cacheKey, req.ChatRequest, resp, cost)
+		s.logger.Info("✓ Response cached")
 	}
+
+	s.logger.Info("=== Chat Completion Request Completed ===",
+		logger.Duration("total_time", time.Since(startTime)))
 
 	return resp, nil
 }
 
 // ChatCompletionsStream 处理流式聊天补全请求
-func (s *service) ChatCompletionsStream(ctx context.Context, req *ProxyRequest) (*http.Response, error) {
+func (s *service) ChatCompletionsStream(ctx context.Context, req *ProxyRequest) (*StreamResponse, error) {
+	s.logger.Info("=== Starting stream request ===",
+		logger.Uint("user_id", req.UserID),
+		logger.String("model", req.Model))
+
 	// 流式请求不使用缓存
 	
 	// 1. 检查配额
+	s.logger.Info("→ Checking user quota...")
 	if err := s.checkQuota(ctx, req.UserID); err != nil {
+		s.logger.Error("✗ Quota check failed", logger.Error(err))
 		return nil, err
 	}
+	s.logger.Info("✓ Quota check passed")
 
 	// 2. 选择 API 配置
+	s.logger.Info("→ Selecting API config...", logger.String("model", req.Model))
 	apiConfig, err := s.selectAPIConfig(ctx, req.Model)
 	if err != nil {
+		s.logger.Error("✗ Failed to select API config", logger.Error(err))
 		return nil, err
 	}
+	s.logger.Info("✓ API config selected",
+		logger.Uint("api_config_id", apiConfig.ID),
+		logger.String("name", apiConfig.Name))
 
 	// 3. 验证定价策略是否存在（商用必须）
+	s.logger.Info("→ Validating pricing...")
 	if err := s.validatePricing(ctx, apiConfig.ID, req.Model); err != nil {
-		s.logger.Error("Pricing validation failed",
+		s.logger.Error("✗ Pricing validation failed",
 			logger.Uint("api_config_id", apiConfig.ID),
 			logger.String("model", req.Model),
 			logger.Error(err))
 		return nil, errors.Wrap(err, 400001, "Pricing not configured for this model")
 	}
+	s.logger.Info("✓ Pricing validated")
 
 	// 4. 根据配置类型创建适配器
 	var adapterInstance adapter.Adapter
 	var credentialID uint
 	
+	s.logger.Info("→ Creating adapter...", logger.String("type", apiConfig.Type))
 	if apiConfig.IsDirect() {
 		// 直接调用
 		adapterInstance, err = s.adapterFactory.CreateAdapter(apiConfig)
 		if err != nil {
+			s.logger.Error("✗ Failed to create adapter", logger.Error(err))
 			return nil, errors.Wrap(err, 500003, "Failed to create adapter")
 		}
 	} else if apiConfig.IsAccountPool() {
@@ -240,6 +304,7 @@ func (s *service) ChatCompletionsStream(ctx context.Context, req *ProxyRequest) 
 		var poolAdapter interface{}
 		poolAdapter, credentialID, err = s.poolManager.GetAdapter(ctx, *apiConfig.AccountPoolID)
 		if err != nil {
+			s.logger.Error("✗ Failed to get adapter from pool", logger.Error(err))
 			return nil, errors.Wrap(err, 500003, "Failed to get adapter from pool")
 		}
 		
@@ -249,24 +314,31 @@ func (s *service) ChatCompletionsStream(ctx context.Context, req *ProxyRequest) 
 		if !ok {
 			return nil, errors.New(500001, "Invalid adapter type from pool")
 		}
+		s.logger.Info("✓ Adapter created from pool", logger.Uint("credential_id", credentialID))
 	} else {
 		return nil, errors.New(500001, "Invalid config type")
 	}
+	s.logger.Info("✓ Adapter created")
 
 	// 5. 调用上游 API（流式）
+	s.logger.Info("→ Calling upstream API (stream)...")
 	resp, err := adapterInstance.CallStream(ctx, req.ChatRequest)
 	if err != nil {
+		s.logger.Error("✗ Failed to call upstream API", logger.Error(err))
 		// 如果是账号池，记录错误
 		if apiConfig.IsAccountPool() && credentialID > 0 {
 			s.poolManager.RecordError(ctx, credentialID, err.Error())
 		}
 		return nil, errors.Wrap(err, 500004, "Failed to call upstream API")
 	}
+	s.logger.Info("✓ Upstream API called successfully")
 
-	// 注意：流式请求的日志记录和配额扣除需要在流读取完成后处理
-	// 这里只返回响应，由调用方处理
-
-	return resp, nil
+	// 返回响应和元数据，由 handler 层包装流并处理日志记录
+	return &StreamResponse{
+		Response:     resp,
+		APIConfigID:  apiConfig.ID,
+		CredentialID: credentialID,
+	}, nil
 }
 
 // checkQuota 检查用户配额

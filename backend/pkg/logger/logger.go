@@ -20,11 +20,12 @@ type Field = zap.Field
 // Config 日志配置
 type Config struct {
 	Level      string // 日志级别: debug, info, warn, error
-	OutputPath string // 输出路径
+	OutputPath string // 输出路径（为空则只输出到控制台）
 	MaxSize    int    // 单个文件最大大小(MB)
 	MaxBackups int    // 保留的旧文件最大数量
 	MaxAge     int    // 保留的旧文件最大天数
 	Compress   bool   // 是否压缩旧文件
+	Console    bool   // 是否同时输出到控制台
 }
 
 // New 创建日志实例
@@ -53,34 +54,50 @@ func New(cfg *Config) (*Logger, error) {
 		MessageKey:     "msg",
 		StacktraceKey:  "stacktrace",
 		LineEnding:     zapcore.DefaultLineEnding,
-		EncodeLevel:    zapcore.LowercaseLevelEncoder,
-		EncodeTime:     zapcore.ISO8601TimeEncoder,
+		EncodeLevel:    zapcore.CapitalColorLevelEncoder, // 彩色输出
+		EncodeTime:     zapcore.TimeEncoderOfLayout("2006/01/02 15:04:05"),
 		EncodeDuration: zapcore.SecondsDurationEncoder,
 		EncodeCaller:   zapcore.ShortCallerEncoder,
 	}
 
 	// 配置输出
-	var writeSyncer zapcore.WriteSyncer
+	var cores []zapcore.Core
+	
+	// 控制台输出（彩色）
+	if cfg.Console || cfg.OutputPath == "" {
+		consoleEncoder := zapcore.NewConsoleEncoder(encoderConfig)
+		consoleCore := zapcore.NewCore(
+			consoleEncoder,
+			zapcore.AddSync(os.Stdout),
+			zapLevel,
+		)
+		cores = append(cores, consoleCore)
+	}
+	
+	// 文件输出（JSON格式）
 	if cfg.OutputPath != "" {
-		// 文件输出（带日志轮转）
-		writeSyncer = zapcore.AddSync(&lumberjack.Logger{
+		fileEncoderConfig := encoderConfig
+		fileEncoderConfig.EncodeLevel = zapcore.LowercaseLevelEncoder // 文件不需要颜色
+		fileEncoder := zapcore.NewJSONEncoder(fileEncoderConfig)
+		
+		fileWriter := zapcore.AddSync(&lumberjack.Logger{
 			Filename:   cfg.OutputPath,
 			MaxSize:    cfg.MaxSize,
 			MaxBackups: cfg.MaxBackups,
 			MaxAge:     cfg.MaxAge,
 			Compress:   cfg.Compress,
 		})
-	} else {
-		// 标准输出
-		writeSyncer = zapcore.AddSync(os.Stdout)
+		
+		fileCore := zapcore.NewCore(
+			fileEncoder,
+			fileWriter,
+			zapLevel,
+		)
+		cores = append(cores, fileCore)
 	}
 
 	// 创建核心
-	core := zapcore.NewCore(
-		zapcore.NewJSONEncoder(encoderConfig),
-		writeSyncer,
-		zapLevel,
-	)
+	core := zapcore.NewTee(cores...)
 
 	// 创建 logger
 	zapLogger := zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1))

@@ -88,6 +88,7 @@ func (app *App) initLogger() error {
 		MaxBackups: 3,
 		MaxAge:     7,
 		Compress:   true,
+		Console:    true, // 同时输出到控制台
 	})
 	if err != nil {
 		return err
@@ -100,7 +101,7 @@ func (app *App) initLogger() error {
 // initDatabase 初始化数据库
 func (app *App) initDatabase() error {
 	db, err := gorm.Open(postgres.Open(app.Config.Database.URL), &gorm.Config{
-		Logger: gormLogger.Default.LogMode(gormLogger.Info),
+		Logger: gormLogger.Default.LogMode(gormLogger.Silent),
 	})
 	if err != nil {
 		return err

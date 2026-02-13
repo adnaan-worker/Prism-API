@@ -164,12 +164,39 @@ func (h *Handler) handleRequest(c *gin.Context, proto protocol.Protocol, model s
 // handleStream 处理流式请求
 func (h *Handler) handleStream(c *gin.Context, req *ProxyRequest, converter protocol.Converter) {
 	// 调用服务
-	resp, err := h.service.ChatCompletionsStream(c.Request.Context(), req)
+	streamResp, err := h.service.ChatCompletionsStream(c.Request.Context(), req)
 	if err != nil {
 		response.ErrorFromError(c, err)
 		return
 	}
-	defer resp.Body.Close()
+
+	// 包装响应流以拦截和解析 token 使用信息
+	// 注意：这里需要将 service 转换为 *service 类型才能访问内部方法
+	// 由于 Service 是接口，我们需要通过类型断言获取具体实现
+	var svc *service
+	if s, ok := h.service.(*service); ok {
+		svc = s
+	} else {
+		// 如果类型断言失败，直接返回原始流（降级处理）
+		c.Header("Content-Type", "text/event-stream")
+		c.Header("Cache-Control", "no-cache")
+		c.Header("Connection", "keep-alive")
+		c.Header("Transfer-Encoding", "chunked")
+		defer streamResp.Response.Body.Close()
+		io.Copy(c.Writer, streamResp.Response.Body)
+		return
+	}
+
+	wrappedReader := NewStreamWrapper(
+		streamResp.Response.Body,
+		c.Request.Context(),
+		svc,
+		req,
+		streamResp.APIConfigID,
+		streamResp.CredentialID,
+		converter.GetProtocol(),
+	)
+	defer wrappedReader.Close()
 
 	// 根据协议设置不同的响应头
 	proto := converter.GetProtocol()
@@ -187,7 +214,7 @@ func (h *Handler) handleStream(c *gin.Context, req *ProxyRequest, converter prot
 	// 复制响应流
 	c.Stream(func(w io.Writer) bool {
 		// 使用 bufio.Reader 逐行读取
-		reader := bufio.NewReader(resp.Body)
+		reader := bufio.NewReader(wrappedReader)
 		for {
 			line, err := reader.ReadBytes('\n')
 			if err != nil {
