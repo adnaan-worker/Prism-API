@@ -204,7 +204,9 @@ const ModelsPage = () => {
       {/* Models Grid */}
       {isLoading ? (
         <div style={{ textAlign: 'center', padding: '60px 0' }}>
-          <Spin size="large" tip="加载模型列表..." />
+          <Spin size="large">
+            <div style={{ paddingTop: 50 }}>加载模型列表...</div>
+          </Spin>
         </div>
       ) : filteredModels.length === 0 ? (
         <Card>

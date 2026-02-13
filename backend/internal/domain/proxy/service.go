@@ -110,7 +110,16 @@ func (s *service) ChatCompletions(ctx context.Context, req *ProxyRequest) (*adap
 		return nil, err
 	}
 
-	// 5. 根据配置类型创建适配器
+	// 5. 验证定价策略是否存在（商用必须）
+	if err := s.validatePricing(ctx, apiConfig.ID, req.Model); err != nil {
+		s.logger.Error("Pricing validation failed",
+			logger.Uint("api_config_id", apiConfig.ID),
+			logger.String("model", req.Model),
+			logger.Error(err))
+		return nil, errors.Wrap(err, 400001, "Pricing not configured for this model")
+	}
+
+	// 6. 根据配置类型创建适配器
 	var adapterInstance adapter.Adapter
 	var credentialID uint
 	
@@ -142,7 +151,7 @@ func (s *service) ChatCompletions(ctx context.Context, req *ProxyRequest) (*adap
 		return nil, errors.New(500001, "Invalid config type")
 	}
 
-	// 6. 调用上游 API
+	// 7. 调用上游 API
 	resp, err := adapterInstance.Call(ctx, req.ChatRequest)
 	if err != nil {
 		// 如果是账号池，记录错误
@@ -160,16 +169,27 @@ func (s *service) ChatCompletions(ctx context.Context, req *ProxyRequest) (*adap
 		s.poolManager.RecordSuccess(ctx, credentialID)
 	}
 
-	// 7. 计算费用并扣除配额
+	// 8. 计算费用并扣除配额（必须成功）
 	cost, err := s.calculateAndDeductCost(ctx, req.UserID, apiConfig.ID, req.Model, resp.Usage)
 	if err != nil {
-		s.logger.Warn("Failed to calculate cost", logger.Error(err))
+		s.logger.Error("Failed to calculate and deduct cost",
+			logger.Uint("user_id", req.UserID),
+			logger.String("model", req.Model),
+			logger.Error(err))
+		// 扣费失败，记录日志但不返回错误（因为请求已经成功）
+		// 这种情况应该触发告警，需要人工介入
+		s.logger.Error("CRITICAL: Request succeeded but billing failed - manual intervention required",
+			logger.Uint("user_id", req.UserID),
+			logger.Uint("api_config_id", apiConfig.ID),
+			logger.String("model", req.Model),
+			logger.Int("prompt_tokens", resp.Usage.PromptTokens),
+			logger.Int("completion_tokens", resp.Usage.CompletionTokens))
 	}
 
-	// 8. 记录请求日志
+	// 9. 记录请求日志
 	s.logRequest(ctx, req, apiConfig.ID, resp.Usage.TotalTokens, time.Since(startTime), nil)
 
-	// 9. 存储到缓存
+	// 10. 存储到缓存
 	if s.runtimeConfig.Get().IsCacheEnabled() && !req.Stream {
 		go s.storeCache(context.Background(), req.UserID, req.Model, cacheKey, req.ChatRequest, resp, cost)
 	}
@@ -192,7 +212,16 @@ func (s *service) ChatCompletionsStream(ctx context.Context, req *ProxyRequest) 
 		return nil, err
 	}
 
-	// 3. 根据配置类型创建适配器
+	// 3. 验证定价策略是否存在（商用必须）
+	if err := s.validatePricing(ctx, apiConfig.ID, req.Model); err != nil {
+		s.logger.Error("Pricing validation failed",
+			logger.Uint("api_config_id", apiConfig.ID),
+			logger.String("model", req.Model),
+			logger.Error(err))
+		return nil, errors.Wrap(err, 400001, "Pricing not configured for this model")
+	}
+
+	// 4. 根据配置类型创建适配器
 	var adapterInstance adapter.Adapter
 	var credentialID uint
 	
@@ -224,7 +253,7 @@ func (s *service) ChatCompletionsStream(ctx context.Context, req *ProxyRequest) 
 		return nil, errors.New(500001, "Invalid config type")
 	}
 
-	// 4. 调用上游 API（流式）
+	// 5. 调用上游 API（流式）
 	resp, err := adapterInstance.CallStream(ctx, req.ChatRequest)
 	if err != nil {
 		// 如果是账号池，记录错误
@@ -248,7 +277,7 @@ func (s *service) checkQuota(ctx context.Context, userID uint) error {
 	}
 
 	if quotaInfo.UsedQuota >= quotaInfo.TotalQuota {
-		return errors.New(403001, "Quota exceeded")
+		return errors.ErrQuotaExceeded
 	}
 
 	return nil
@@ -505,6 +534,20 @@ func (s *service) calculateAndDeductCost(ctx context.Context, userID uint, apiCo
 	}
 
 	return int(costResp.TotalCost), nil
+}
+
+// validatePricing 验证定价策略是否存在
+func (s *service) validatePricing(ctx context.Context, apiConfigID uint, model string) error {
+	// 尝试获取定价信息
+	costReq := &pricing.CalculateCostRequest{
+		APIConfigID:  apiConfigID,
+		ModelName:    model,
+		InputTokens:  0,
+		OutputTokens: 0,
+	}
+
+	_, err := s.pricingService.CalculateCost(ctx, costReq)
+	return err
 }
 
 // logRequest 记录请求日志

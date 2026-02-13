@@ -46,7 +46,7 @@ func (r *repository) Update(ctx context.Context, pricing *Pricing) error {
 	return r.db.WithContext(ctx).Save(pricing).Error
 }
 
-// Delete 删除定价（软删除）
+// Delete 删除定价
 func (r *repository) Delete(ctx context.Context, id uint) error {
 	return r.db.WithContext(ctx).Delete(&Pricing{}, id).Error
 }

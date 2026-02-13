@@ -44,7 +44,7 @@ func (r *repository) Update(ctx context.Context, user *User) error {
 	return r.db.WithContext(ctx).Save(user).Error
 }
 
-// Delete 删除用户（软删除）
+// Delete 删除用户
 func (r *repository) Delete(ctx context.Context, id uint) error {
 	return r.db.WithContext(ctx).Delete(&User{}, id).Error
 }

@@ -2,16 +2,13 @@ package apikey
 
 import (
 	"time"
-
-	"gorm.io/gorm"
 )
 
-// APIKey API密钥模型
+// APIKey API瀵嗛挜妯″瀷
 type APIKey struct {
 	ID         uint           `gorm:"primarykey" json:"id"`
 	CreatedAt  time.Time      `json:"created_at"`
 	UpdatedAt  time.Time      `json:"updated_at"`
-	DeletedAt  gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 	UserID     uint           `gorm:"not null;index" json:"user_id"`
 	Key        string         `gorm:"uniqueIndex;not null;size:255" json:"key"`
 	Name       string         `gorm:"not null;size:255" json:"name"`
@@ -20,27 +17,27 @@ type APIKey struct {
 	LastUsedAt *time.Time     `json:"last_used_at,omitempty"`
 }
 
-// TableName 指定表名
+// TableName 鎸囧畾琛ㄥ悕
 func (APIKey) TableName() string {
 	return "api_keys"
 }
 
-// IsValid 检查密钥是否有效
+// IsValid 妫€鏌ュ瘑閽ユ槸鍚︽湁鏁?
 func (k *APIKey) IsValid() bool {
-	return k.IsActive && k.DeletedAt.Time.IsZero()
+	return k.IsActive
 }
 
-// Activate 激活密钥
+// Activate 婵€娲诲瘑閽?
 func (k *APIKey) Activate() {
 	k.IsActive = true
 }
 
-// Deactivate 停用密钥
+// Deactivate 鍋滅敤瀵嗛挜
 func (k *APIKey) Deactivate() {
 	k.IsActive = false
 }
 
-// UpdateLastUsed 更新最后使用时间
+// UpdateLastUsed 鏇存柊鏈€鍚庝娇鐢ㄦ椂闂?
 func (k *APIKey) UpdateLastUsed() {
 	now := time.Now()
 	k.LastUsedAt = &now

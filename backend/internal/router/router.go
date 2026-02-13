@@ -136,6 +136,13 @@ func (r *Router) setupUserRoutes() {
 		// 缓存统计
 		user.GET("/cache/stats", r.cacheHandler.GetCacheStats)
 	}
+	
+	// 模型列表（不需要认证，但需要在 /api/v1 下）
+	models := r.engine.Group("/api/v1")
+	models.Use(r.mw.Auth.Handle())
+	{
+		models.GET("/models", r.apiConfigHandler.GetAvailableModels)
+	}
 }
 
 // setupAPIKeyRoutes 设置API密钥路由

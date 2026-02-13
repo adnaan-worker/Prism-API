@@ -419,3 +419,23 @@ func (h *Handler) FetchModels(c *gin.Context) {
 
 	response.Success(c, result)
 }
+
+// GetAvailableModels 获取所有可用的模型列表（用于用户端）
+// @Summary 获取可用模型列表
+// @Description 获取所有激活配置中的可用模型
+// @Tags Models
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} AvailableModelsResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/models [get]
+func (h *Handler) GetAvailableModels(c *gin.Context) {
+	models, err := h.service.GetAvailableModels(c.Request.Context())
+	if err != nil {
+		response.InternalError(c, err)
+		return
+	}
+
+	response.Success(c, models)
+}

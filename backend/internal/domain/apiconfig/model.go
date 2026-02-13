@@ -4,11 +4,9 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"time"
-
-	"gorm.io/gorm"
 )
 
-// StringArray 字符串数组类型（存储为 JSON）
+// StringArray 瀛楃涓叉暟缁勭被鍨嬶紙瀛樺偍涓?JSON锛?
 type StringArray []string
 
 func (s StringArray) Value() (driver.Value, error) {
@@ -30,7 +28,7 @@ func (s *StringArray) Scan(value interface{}) error {
 	return json.Unmarshal(bytes, s)
 }
 
-// JSONMap JSON 对象类型
+// JSONMap JSON 瀵硅薄绫诲瀷
 type JSONMap map[string]interface{}
 
 func (j JSONMap) Value() (driver.Value, error) {
@@ -52,29 +50,28 @@ func (j *JSONMap) Scan(value interface{}) error {
 	return json.Unmarshal(bytes, j)
 }
 
-// 配置类型常量
+// 閰嶇疆绫诲瀷甯搁噺
 const (
-	ConfigTypeDirect      = "direct"       // 直接调用第三方 API
-	ConfigTypeAccountPool = "account_pool" // 使用账号池
+	ConfigTypeDirect      = "direct"       // 鐩存帴璋冪敤绗笁鏂?API
+	ConfigTypeAccountPool = "account_pool" // 浣跨敤璐﹀彿姹?
 )
 
-// APIConfig API配置模型
+// APIConfig API閰嶇疆妯″瀷
 type APIConfig struct {
 	ID        uint           `gorm:"primarykey" json:"id"`
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
-	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 	Name      string         `gorm:"not null;size:255" json:"name"`
 	Type      string         `gorm:"not null;size:50" json:"type"` // openai, anthropic, gemini, kiro
 	
-	// 配置类型
+	// 閰嶇疆绫诲瀷
 	ConfigType string `gorm:"not null;size:50;default:'direct'" json:"config_type"` // direct, account_pool
 	
-	// 直接调用配置
+	// 鐩存帴璋冪敤閰嶇疆
 	BaseURL string `gorm:"type:text" json:"base_url,omitempty"`
 	APIKey  string `gorm:"type:text" json:"api_key,omitempty"`
 	
-	// 账号池配置
+	// 璐﹀彿姹犻厤缃?
 	AccountPoolID *uint `gorm:"index" json:"account_pool_id,omitempty"`
 	
 	Models   StringArray `gorm:"type:jsonb;not null;default:'[]'" json:"models"`
@@ -87,27 +84,27 @@ type APIConfig struct {
 	Timeout  int         `gorm:"not null;default:30" json:"timeout"`
 }
 
-// TableName 指定表名
+// TableName 鎸囧畾琛ㄥ悕
 func (APIConfig) TableName() string {
 	return "api_configs"
 }
 
-// IsValid 检查配置是否有效
+// IsValid 妫€鏌ラ厤缃槸鍚︽湁鏁?
 func (c *APIConfig) IsValid() bool {
-	return c.IsActive && c.DeletedAt.Time.IsZero()
+	return c.IsActive
 }
 
-// Activate 激活配置
+// Activate 婵€娲婚厤缃?
 func (c *APIConfig) Activate() {
 	c.IsActive = true
 }
 
-// Deactivate 停用配置
+// Deactivate 鍋滅敤閰嶇疆
 func (c *APIConfig) Deactivate() {
 	c.IsActive = false
 }
 
-// HasModel 检查是否支持指定模型
+// HasModel 妫€鏌ユ槸鍚︽敮鎸佹寚瀹氭ā鍨?
 func (c *APIConfig) HasModel(model string) bool {
 	for _, m := range c.Models {
 		if m == model {
@@ -117,14 +114,14 @@ func (c *APIConfig) HasModel(model string) bool {
 	return false
 }
 
-// AddModel 添加模型
+// AddModel 娣诲姞妯″瀷
 func (c *APIConfig) AddModel(model string) {
 	if !c.HasModel(model) {
 		c.Models = append(c.Models, model)
 	}
 }
 
-// RemoveModel 移除模型
+// RemoveModel 绉婚櫎妯″瀷
 func (c *APIConfig) RemoveModel(model string) {
 	newModels := make([]string, 0, len(c.Models))
 	for _, m := range c.Models {
@@ -135,7 +132,7 @@ func (c *APIConfig) RemoveModel(model string) {
 	c.Models = newModels
 }
 
-// SetHeader 设置请求头
+// SetHeader 璁剧疆璇锋眰澶?
 func (c *APIConfig) SetHeader(key string, value interface{}) {
 	if c.Headers == nil {
 		c.Headers = make(JSONMap)
@@ -143,7 +140,7 @@ func (c *APIConfig) SetHeader(key string, value interface{}) {
 	c.Headers[key] = value
 }
 
-// GetHeader 获取请求头
+// GetHeader 鑾峰彇璇锋眰澶?
 func (c *APIConfig) GetHeader(key string) (interface{}, bool) {
 	if c.Headers == nil {
 		return nil, false
@@ -152,7 +149,7 @@ func (c *APIConfig) GetHeader(key string) (interface{}, bool) {
 	return val, ok
 }
 
-// SetMetadata 设置元数据
+// SetMetadata 璁剧疆鍏冩暟鎹?
 func (c *APIConfig) SetMetadata(key string, value interface{}) {
 	if c.Metadata == nil {
 		c.Metadata = make(JSONMap)
@@ -160,7 +157,7 @@ func (c *APIConfig) SetMetadata(key string, value interface{}) {
 	c.Metadata[key] = value
 }
 
-// GetMetadata 获取元数据
+// GetMetadata 鑾峰彇鍏冩暟鎹?
 func (c *APIConfig) GetMetadata(key string) (interface{}, bool) {
 	if c.Metadata == nil {
 		return nil, false
@@ -169,32 +166,32 @@ func (c *APIConfig) GetMetadata(key string) (interface{}, bool) {
 	return val, ok
 }
 
-// GetType 获取类型（实现 adapter.APIConfigInterface）
+// GetType 鑾峰彇绫诲瀷锛堝疄鐜?adapter.APIConfigInterface锛?
 func (c *APIConfig) GetType() string {
 	return c.Type
 }
 
-// GetBaseURL 获取 BaseURL（实现 adapter.APIConfigInterface）
+// GetBaseURL 鑾峰彇 BaseURL锛堝疄鐜?adapter.APIConfigInterface锛?
 func (c *APIConfig) GetBaseURL() string {
 	return c.BaseURL
 }
 
-// GetAPIKey 获取 APIKey（实现 adapter.APIConfigInterface）
+// GetAPIKey 鑾峰彇 APIKey锛堝疄鐜?adapter.APIConfigInterface锛?
 func (c *APIConfig) GetAPIKey() string {
 	return c.APIKey
 }
 
-// GetTimeout 获取超时时间（实现 adapter.APIConfigInterface）
+// GetTimeout 鑾峰彇瓒呮椂鏃堕棿锛堝疄鐜?adapter.APIConfigInterface锛?
 func (c *APIConfig) GetTimeout() int {
 	return c.Timeout
 }
 
-// IsDirect 是否是直接调用
+// IsDirect 鏄惁鏄洿鎺ヨ皟鐢?
 func (c *APIConfig) IsDirect() bool {
 	return c.ConfigType == ConfigTypeDirect
 }
 
-// IsAccountPool 是否使用账号池
+// IsAccountPool 鏄惁浣跨敤璐﹀彿姹?
 func (c *APIConfig) IsAccountPool() bool {
 	return c.ConfigType == ConfigTypeAccountPool
 }

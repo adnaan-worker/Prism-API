@@ -140,3 +140,19 @@ type FetchModelsResponse struct {
 	Models   []*ModelInfo `json:"models"`
 	Count    int          `json:"count"`
 }
+
+// ModelResponse 模型响应（用于用户端）
+type ModelResponse struct {
+	Name        string `json:"name"`
+	Provider    string `json:"provider"`
+	Type        string `json:"type"`
+	Description string `json:"description"`
+	Status      string `json:"status"`
+	ConfigCount int    `json:"config_count"`
+}
+
+// AvailableModelsResponse 可用模型列表响应
+type AvailableModelsResponse struct {
+	Models []*ModelResponse `json:"models"`
+	Total  int              `json:"total"`
+}

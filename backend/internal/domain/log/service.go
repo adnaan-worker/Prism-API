@@ -1,6 +1,7 @@
 package log
 
 import (
+	"api-aggregator/backend/internal/domain/user"
 	"api-aggregator/backend/pkg/errors"
 	"api-aggregator/backend/pkg/logger"
 	"api-aggregator/backend/pkg/query"
@@ -18,15 +19,17 @@ type Service interface {
 
 // service 日志服务实现
 type service struct {
-	repo   Repository
-	logger logger.Logger
+	repo     Repository
+	userRepo user.Repository
+	logger   logger.Logger
 }
 
 // NewService 创建日志服务
-func NewService(repo Repository, logger logger.Logger) Service {
+func NewService(repo Repository, userRepo user.Repository, logger logger.Logger) Service {
 	return &service{
-		repo:   repo,
-		logger: logger,
+		repo:     repo,
+		userRepo: userRepo,
+		logger:   logger,
 	}
 }
 
@@ -122,8 +125,11 @@ func (s *service) GetLogs(ctx context.Context, req *GetLogsRequest) (*LogListRes
 		return nil, errors.Wrap(err, 500002, "Failed to get logs")
 	}
 
+	// 转换为响应并加载用户信息
+	responses := s.toResponseListWithUserInfo(ctx, logs)
+
 	return &LogListResponse{
-		Logs:     ToResponseList(logs),
+		Logs:     responses,
 		Total:    total,
 		Page:     req.Page,
 		PageSize: req.PageSize,
@@ -161,4 +167,55 @@ func (s *service) DeleteOldLogs(ctx context.Context, days int) (int64, error) {
 		logger.Int64("deleted", deleted))
 
 	return deleted, nil
+}
+
+
+// toResponseListWithUserInfo 转换为响应列表并加载用户信息
+func (s *service) toResponseListWithUserInfo(ctx context.Context, logs []*RequestLog) []*LogResponse {
+	if len(logs) == 0 {
+		return []*LogResponse{}
+	}
+
+	// 收集所有唯一的用户 ID
+	userIDs := make(map[uint]bool)
+	for _, log := range logs {
+		userIDs[log.UserID] = true
+	}
+
+	// 批量加载用户信息
+	userMap := make(map[uint]string)
+	for id := range userIDs {
+		user, err := s.userRepo.FindByID(ctx, id)
+		if err != nil {
+			s.logger.Warn("Failed to load user",
+				logger.Uint("user_id", id),
+				logger.Error(err))
+			continue
+		}
+		if user != nil {
+			userMap[id] = user.Username
+		}
+	}
+
+	// 转换为响应对象
+	responses := make([]*LogResponse, len(logs))
+	for i, log := range logs {
+		resp := log.ToResponse()
+		
+		// 添加用户名
+		if username, ok := userMap[log.UserID]; ok {
+			resp.Username = username
+		}
+		
+		// 设置状态
+		if log.StatusCode >= 200 && log.StatusCode < 300 {
+			resp.Status = "success"
+		} else {
+			resp.Status = "failed"
+		}
+		
+		responses[i] = resp
+	}
+
+	return responses
 }

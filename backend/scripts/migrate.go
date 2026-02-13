@@ -50,7 +50,6 @@ func main() {
 			id SERIAL PRIMARY KEY,
 			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			deleted_at TIMESTAMP,
 			username VARCHAR(255) NOT NULL UNIQUE,
 			email VARCHAR(255) NOT NULL UNIQUE,
 			password_hash VARCHAR(255) NOT NULL,
@@ -74,7 +73,6 @@ func main() {
 			id SERIAL PRIMARY KEY,
 			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			deleted_at TIMESTAMP,
 			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 			key VARCHAR(255) NOT NULL UNIQUE,
 			name VARCHAR(255) NOT NULL,
@@ -95,7 +93,6 @@ func main() {
 			id SERIAL PRIMARY KEY,
 			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			deleted_at TIMESTAMP,
 			name VARCHAR(255) NOT NULL,
 			type VARCHAR(50) NOT NULL,
 			config_type VARCHAR(50) NOT NULL DEFAULT 'direct',
@@ -124,7 +121,6 @@ func main() {
 			id SERIAL PRIMARY KEY,
 			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			deleted_at TIMESTAMP,
 			"key" VARCHAR(255) NOT NULL UNIQUE,
 			value TEXT,
 			type VARCHAR(50) NOT NULL DEFAULT 'string',
@@ -147,7 +143,6 @@ func main() {
 			id SERIAL PRIMARY KEY,
 			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			deleted_at TIMESTAMP,
 			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 			quota_awarded INTEGER NOT NULL
 		)
@@ -166,7 +161,6 @@ func main() {
 			id SERIAL PRIMARY KEY,
 			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			deleted_at TIMESTAMP,
 			api_config_id INTEGER NOT NULL REFERENCES api_configs(id) ON DELETE CASCADE,
 			model_name VARCHAR(255) NOT NULL,
 			input_price DOUBLE PRECISION NOT NULL DEFAULT 0,
@@ -193,7 +187,6 @@ func main() {
 		CREATE TABLE IF NOT EXISTS request_logs (
 			id SERIAL PRIMARY KEY,
 			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			deleted_at TIMESTAMP,
 			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 			api_key_id INTEGER NOT NULL,
 			api_config_id INTEGER NOT NULL,
@@ -246,7 +239,6 @@ func main() {
 			id SERIAL PRIMARY KEY,
 			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			deleted_at TIMESTAMP,
 			model_name VARCHAR(255) NOT NULL,
 			strategy VARCHAR(50) NOT NULL DEFAULT 'round_robin',
 			is_active BOOLEAN NOT NULL DEFAULT true
@@ -266,7 +258,6 @@ func main() {
 			id SERIAL PRIMARY KEY,
 			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			deleted_at TIMESTAMP,
 			name VARCHAR(255) NOT NULL,
 			description TEXT,
 			provider_type VARCHAR(50) NOT NULL,
@@ -292,7 +283,6 @@ func main() {
 			id SERIAL PRIMARY KEY,
 			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			deleted_at TIMESTAMP,
 			pool_id INTEGER NOT NULL REFERENCES account_pools(id) ON DELETE CASCADE,
 			provider_type VARCHAR(50) NOT NULL,
 			auth_type VARCHAR(50) NOT NULL DEFAULT 'api_key',
@@ -373,38 +363,33 @@ func main() {
 func createIndexes(db *gorm.DB) {
 	indexes := []string{
 		// ==================== users 表索引 ====================
-		"CREATE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE deleted_at IS NULL",
-		"CREATE INDEX IF NOT EXISTS idx_users_username ON users(username) WHERE deleted_at IS NULL",
-		"CREATE INDEX IF NOT EXISTS idx_users_status ON users(status) WHERE deleted_at IS NULL",
-		"CREATE INDEX IF NOT EXISTS idx_users_is_admin ON users(is_admin) WHERE deleted_at IS NULL",
-		"CREATE INDEX IF NOT EXISTS idx_users_deleted_at ON users(deleted_at)",
+		"CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)",
+		"CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)",
+		"CREATE INDEX IF NOT EXISTS idx_users_status ON users(status)",
+		"CREATE INDEX IF NOT EXISTS idx_users_is_admin ON users(is_admin)",
 
 		// ==================== api_keys 表索引 ====================
-		"CREATE INDEX IF NOT EXISTS idx_api_keys_key ON api_keys(key) WHERE deleted_at IS NULL",
-		"CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys(user_id) WHERE deleted_at IS NULL",
-		"CREATE INDEX IF NOT EXISTS idx_api_keys_user_active ON api_keys(user_id, is_active) WHERE deleted_at IS NULL",
-		"CREATE INDEX IF NOT EXISTS idx_api_keys_deleted_at ON api_keys(deleted_at)",
+		"CREATE INDEX IF NOT EXISTS idx_api_keys_key ON api_keys(key)",
+		"CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys(user_id)",
+		"CREATE INDEX IF NOT EXISTS idx_api_keys_user_active ON api_keys(user_id, is_active)",
 
 		// ==================== api_configs 表索引 ====================
-		"CREATE INDEX IF NOT EXISTS idx_api_configs_type ON api_configs(type) WHERE deleted_at IS NULL",
-		"CREATE INDEX IF NOT EXISTS idx_api_configs_config_type ON api_configs(config_type) WHERE deleted_at IS NULL",
-		"CREATE INDEX IF NOT EXISTS idx_api_configs_account_pool_id ON api_configs(account_pool_id) WHERE deleted_at IS NULL",
-		"CREATE INDEX IF NOT EXISTS idx_api_configs_is_active ON api_configs(is_active) WHERE deleted_at IS NULL",
-		"CREATE INDEX IF NOT EXISTS idx_api_configs_priority ON api_configs(priority DESC) WHERE deleted_at IS NULL AND is_active = true",
-		"CREATE INDEX IF NOT EXISTS idx_api_configs_type_active ON api_configs(type, is_active) WHERE deleted_at IS NULL",
-		"CREATE INDEX IF NOT EXISTS idx_api_configs_deleted_at ON api_configs(deleted_at)",
+		"CREATE INDEX IF NOT EXISTS idx_api_configs_type ON api_configs(type)",
+		"CREATE INDEX IF NOT EXISTS idx_api_configs_config_type ON api_configs(config_type)",
+		"CREATE INDEX IF NOT EXISTS idx_api_configs_account_pool_id ON api_configs(account_pool_id)",
+		"CREATE INDEX IF NOT EXISTS idx_api_configs_is_active ON api_configs(is_active)",
+		"CREATE INDEX IF NOT EXISTS idx_api_configs_priority ON api_configs(priority DESC) WHERE is_active = true",
+		"CREATE INDEX IF NOT EXISTS idx_api_configs_type_active ON api_configs(type, is_active)",
 
 		// ==================== settings 表索引 ====================
-		"CREATE INDEX IF NOT EXISTS idx_settings_key ON settings(\"key\") WHERE deleted_at IS NULL",
-		"CREATE INDEX IF NOT EXISTS idx_settings_is_system ON settings(is_system) WHERE deleted_at IS NULL",
-		"CREATE INDEX IF NOT EXISTS idx_settings_deleted_at ON settings(deleted_at)",
+		"CREATE INDEX IF NOT EXISTS idx_settings_key ON settings(\"key\")",
+		"CREATE INDEX IF NOT EXISTS idx_settings_is_system ON settings(is_system)",
 
 		// ==================== pricings 表索引 ====================
-		"CREATE INDEX IF NOT EXISTS idx_pricings_api_config_id ON pricings(api_config_id) WHERE deleted_at IS NULL",
-		"CREATE INDEX IF NOT EXISTS idx_pricings_model_name ON pricings(model_name) WHERE deleted_at IS NULL",
-		"CREATE INDEX IF NOT EXISTS idx_pricings_is_active ON pricings(is_active) WHERE deleted_at IS NULL",
-		"CREATE INDEX IF NOT EXISTS idx_pricings_config_model_active ON pricings(api_config_id, model_name, is_active) WHERE deleted_at IS NULL",
-		"CREATE INDEX IF NOT EXISTS idx_pricings_deleted_at ON pricings(deleted_at)",
+		"CREATE INDEX IF NOT EXISTS idx_pricings_api_config_id ON pricings(api_config_id)",
+		"CREATE INDEX IF NOT EXISTS idx_pricings_model_name ON pricings(model_name)",
+		"CREATE INDEX IF NOT EXISTS idx_pricings_is_active ON pricings(is_active)",
+		"CREATE INDEX IF NOT EXISTS idx_pricings_config_model_active ON pricings(api_config_id, model_name, is_active)",
 
 		// ==================== request_logs 表索引 ====================
 		// 时间范围查询优化
@@ -424,7 +409,6 @@ func createIndexes(db *gorm.DB) {
 		"CREATE INDEX IF NOT EXISTS idx_sign_in_records_user_id ON sign_in_records(user_id)",
 		"CREATE INDEX IF NOT EXISTS idx_sign_in_records_user_created ON sign_in_records(user_id, created_at DESC)",
 		"CREATE INDEX IF NOT EXISTS idx_sign_in_records_created_at ON sign_in_records(created_at DESC)",
-		"CREATE INDEX IF NOT EXISTS idx_sign_in_records_deleted_at ON sign_in_records(deleted_at)",
 
 		// ==================== request_caches 表索引 ====================
 		"CREATE INDEX IF NOT EXISTS idx_request_caches_user_id ON request_caches(user_id)",
@@ -438,28 +422,25 @@ func createIndexes(db *gorm.DB) {
 
 		// ==================== load_balancer_configs 表索引 ====================
 		"CREATE INDEX IF NOT EXISTS idx_load_balancer_configs_model_name ON load_balancer_configs(model_name)",
-		"CREATE INDEX IF NOT EXISTS idx_load_balancer_configs_is_active ON load_balancer_configs(is_active) WHERE deleted_at IS NULL",
-		"CREATE INDEX IF NOT EXISTS idx_load_balancer_configs_model_active ON load_balancer_configs(model_name, is_active) WHERE deleted_at IS NULL",
-		"CREATE INDEX IF NOT EXISTS idx_load_balancer_configs_deleted_at ON load_balancer_configs(deleted_at)",
+		"CREATE INDEX IF NOT EXISTS idx_load_balancer_configs_is_active ON load_balancer_configs(is_active)",
+		"CREATE INDEX IF NOT EXISTS idx_load_balancer_configs_model_active ON load_balancer_configs(model_name, is_active)",
 
 		// ==================== account_pools 表索引 ====================
 		"CREATE INDEX IF NOT EXISTS idx_account_pools_provider_type ON account_pools(provider_type)",
-		"CREATE INDEX IF NOT EXISTS idx_account_pools_is_active ON account_pools(is_active) WHERE deleted_at IS NULL",
-		"CREATE INDEX IF NOT EXISTS idx_account_pools_provider_active ON account_pools(provider_type, is_active) WHERE deleted_at IS NULL",
-		"CREATE INDEX IF NOT EXISTS idx_account_pools_deleted_at ON account_pools(deleted_at)",
+		"CREATE INDEX IF NOT EXISTS idx_account_pools_is_active ON account_pools(is_active)",
+		"CREATE INDEX IF NOT EXISTS idx_account_pools_provider_active ON account_pools(provider_type, is_active)",
 
 		// ==================== account_credentials 表索引 ====================
 		"CREATE INDEX IF NOT EXISTS idx_account_credentials_pool_id ON account_credentials(pool_id)",
 		"CREATE INDEX IF NOT EXISTS idx_account_credentials_provider_type ON account_credentials(provider_type)",
-		"CREATE INDEX IF NOT EXISTS idx_account_credentials_is_active ON account_credentials(is_active) WHERE deleted_at IS NULL",
+		"CREATE INDEX IF NOT EXISTS idx_account_credentials_is_active ON account_credentials(is_active)",
 		"CREATE INDEX IF NOT EXISTS idx_account_credentials_health_status ON account_credentials(health_status)",
 		"CREATE INDEX IF NOT EXISTS idx_account_credentials_expires_at ON account_credentials(expires_at)",
 		"CREATE INDEX IF NOT EXISTS idx_account_credentials_metadata ON account_credentials USING gin(metadata)",
 		// 账号池选择优化
-		"CREATE INDEX IF NOT EXISTS idx_account_credentials_pool_active_health ON account_credentials(pool_id, is_active, health_status) WHERE deleted_at IS NULL",
+		"CREATE INDEX IF NOT EXISTS idx_account_credentials_pool_active_health ON account_credentials(pool_id, is_active, health_status)",
 		// 过期检查优化
-		"CREATE INDEX IF NOT EXISTS idx_account_credentials_expires_active ON account_credentials(expires_at, is_active) WHERE deleted_at IS NULL AND expires_at IS NOT NULL",
-		"CREATE INDEX IF NOT EXISTS idx_account_credentials_deleted_at ON account_credentials(deleted_at)",
+		"CREATE INDEX IF NOT EXISTS idx_account_credentials_expires_active ON account_credentials(expires_at, is_active) WHERE expires_at IS NOT NULL",
 
 		// ==================== account_pool_request_logs 表索引 ====================
 		"CREATE INDEX IF NOT EXISTS idx_account_pool_request_logs_credential_id ON account_pool_request_logs(credential_id)",

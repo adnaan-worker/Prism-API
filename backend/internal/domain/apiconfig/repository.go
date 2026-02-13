@@ -47,7 +47,7 @@ func (r *repository) Update(ctx context.Context, config *APIConfig) error {
 	return r.db.WithContext(ctx).Save(config).Error
 }
 
-// Delete 删除配置（软删除）
+// Delete 删除配置
 func (r *repository) Delete(ctx context.Context, id uint) error {
 	return r.db.WithContext(ctx).Delete(&APIConfig{}, id).Error
 }

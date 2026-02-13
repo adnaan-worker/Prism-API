@@ -32,12 +32,14 @@ type LogResponse struct {
 	ID           uint      `json:"id"`
 	CreatedAt    time.Time `json:"created_at"`
 	UserID       uint      `json:"user_id"`
+	Username     string    `json:"username,omitempty"`
 	APIKeyID     uint      `json:"api_key_id"`
 	APIConfigID  uint      `json:"api_config_id"`
 	Model        string    `json:"model"`
 	Method       string    `json:"method"`
 	Path         string    `json:"path"`
 	StatusCode   int       `json:"status_code"`
+	Status       string    `json:"status"`
 	ResponseTime int       `json:"response_time"`
 	TokensUsed   int       `json:"tokens_used"`
 	ErrorMsg     string    `json:"error_msg,omitempty"`

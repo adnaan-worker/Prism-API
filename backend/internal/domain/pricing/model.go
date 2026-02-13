@@ -2,16 +2,13 @@ package pricing
 
 import (
 	"time"
-
-	"gorm.io/gorm"
 )
 
-// Pricing 定价模型
+// Pricing 瀹氫环妯″瀷
 type Pricing struct {
 	ID          uint           `gorm:"primarykey" json:"id"`
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
-	DeletedAt   gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 	APIConfigID uint           `gorm:"not null;uniqueIndex:idx_config_model" json:"api_config_id"`
 	ModelName   string         `gorm:"not null;size:255;uniqueIndex:idx_config_model" json:"model_name"`
 	InputPrice  float64        `gorm:"not null;default:0" json:"input_price"`
@@ -22,27 +19,27 @@ type Pricing struct {
 	Description string         `gorm:"size:500" json:"description"`
 }
 
-// TableName 指定表名
+// TableName 鎸囧畾琛ㄥ悕
 func (Pricing) TableName() string {
 	return "pricings"
 }
 
-// IsValid 检查定价是否有效
+// IsValid 妫€鏌ュ畾浠锋槸鍚︽湁鏁?
 func (p *Pricing) IsValid() bool {
-	return p.IsActive && p.DeletedAt.Time.IsZero()
+	return p.IsActive
 }
 
-// Activate 激活定价
+// Activate 婵€娲诲畾浠?
 func (p *Pricing) Activate() {
 	p.IsActive = true
 }
 
-// Deactivate 停用定价
+// Deactivate 鍋滅敤瀹氫环
 func (p *Pricing) Deactivate() {
 	p.IsActive = false
 }
 
-// CalculateInputCost 计算输入成本
+// CalculateInputCost 璁＄畻杈撳叆鎴愭湰
 func (p *Pricing) CalculateInputCost(tokens int64) float64 {
 	if p.Unit == 0 {
 		return 0
@@ -50,7 +47,7 @@ func (p *Pricing) CalculateInputCost(tokens int64) float64 {
 	return float64(tokens) / float64(p.Unit) * p.InputPrice
 }
 
-// CalculateOutputCost 计算输出成本
+// CalculateOutputCost 璁＄畻杈撳嚭鎴愭湰
 func (p *Pricing) CalculateOutputCost(tokens int64) float64 {
 	if p.Unit == 0 {
 		return 0
@@ -58,7 +55,7 @@ func (p *Pricing) CalculateOutputCost(tokens int64) float64 {
 	return float64(tokens) / float64(p.Unit) * p.OutputPrice
 }
 
-// CalculateTotalCost 计算总成本
+// CalculateTotalCost 璁＄畻鎬绘垚鏈?
 func (p *Pricing) CalculateTotalCost(inputTokens, outputTokens int64) float64 {
 	return p.CalculateInputCost(inputTokens) + p.CalculateOutputCost(outputTokens)
 }

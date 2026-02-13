@@ -45,19 +45,27 @@ type BatchCreatePricingRequest struct {
 	Pricings []CreatePricingRequest `json:"pricings" binding:"required,min=1"`
 }
 
+// APIConfigInfo API配置基本信息
+type APIConfigInfo struct {
+	ID   uint   `json:"id"`
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
 // PricingResponse 定价响应
 type PricingResponse struct {
-	ID          uint      `json:"id"`
-	APIConfigID uint      `json:"api_config_id"`
-	ModelName   string    `json:"model_name"`
-	InputPrice  float64   `json:"input_price"`
-	OutputPrice float64   `json:"output_price"`
-	Currency    string    `json:"currency"`
-	Unit        int       `json:"unit"`
-	IsActive    bool      `json:"is_active"`
-	Description string    `json:"description"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID          uint           `json:"id"`
+	APIConfigID uint           `json:"api_config_id"`
+	APIConfig   *APIConfigInfo `json:"api_config,omitempty"`
+	ModelName   string         `json:"model_name"`
+	InputPrice  float64        `json:"input_price"`
+	OutputPrice float64        `json:"output_price"`
+	Currency    string         `json:"currency"`
+	Unit        int            `json:"unit"`
+	IsActive    bool           `json:"is_active"`
+	Description string         `json:"description"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
 }
 
 // PricingListResponse 定价列表响应

@@ -22,6 +22,7 @@ type Service interface {
 	GetAllConfigs(ctx context.Context) ([]*ConfigResponse, error)
 	GetActiveConfigs(ctx context.Context) ([]*ConfigResponse, error)
 	GetConfigsByModel(ctx context.Context, model string) ([]*ConfigResponse, error)
+	GetAvailableModels(ctx context.Context) (*AvailableModelsResponse, error)
 	UpdateConfig(ctx context.Context, id uint, req *UpdateConfigRequest) (*ConfigResponse, error)
 	DeleteConfig(ctx context.Context, id uint) error
 	ActivateConfig(ctx context.Context, id uint) error
@@ -460,6 +461,95 @@ func (s *service) BatchDeactivateConfigs(ctx context.Context, ids []uint) (*Batc
 		Message: "Configurations deactivated successfully",
 		Count:   len(ids),
 	}, nil
+}
+
+// GetAvailableModels 获取所有可用的模型列表（用于用户端）
+func (s *service) GetAvailableModels(ctx context.Context) (*AvailableModelsResponse, error) {
+	// 获取所有激活的配置
+	configs, err := s.repo.FindActive(ctx)
+	if err != nil {
+		s.logger.Error("Failed to get active configs", logger.Error(err))
+		return nil, errors.Wrap(err, 500002, "Failed to get active configs")
+	}
+
+	// 统计每个模型的配置数量和状态
+	modelMap := make(map[string]*ModelResponse)
+	
+	for _, config := range configs {
+		for _, modelName := range config.Models {
+			if existing, ok := modelMap[modelName]; ok {
+				// 模型已存在，增加配置计数
+				existing.ConfigCount++
+			} else {
+				// 新模型
+				modelType := "chat"
+				description := s.getModelDescription(modelName, config.Type)
+				
+				modelMap[modelName] = &ModelResponse{
+					Name:        modelName,
+					Provider:    config.Type,
+					Type:        modelType,
+					Description: description,
+					Status:      "active",
+					ConfigCount: 1,
+				}
+			}
+		}
+	}
+
+	// 转换为数组
+	models := make([]*ModelResponse, 0, len(modelMap))
+	for _, model := range modelMap {
+		models = append(models, model)
+	}
+
+	return &AvailableModelsResponse{
+		Models: models,
+		Total:  len(models),
+	}, nil
+}
+
+// getModelDescription 获取模型描述
+func (s *service) getModelDescription(modelName, provider string) string {
+	descriptions := map[string]string{
+		// OpenAI
+		"gpt-4": "GPT-4 是 OpenAI 最先进的模型，具有更强的推理能力",
+		"gpt-4-turbo": "GPT-4 Turbo 是 GPT-4 的优化版本，速度更快，成本更低",
+		"gpt-4-turbo-preview": "GPT-4 Turbo 预览版，支持最新功能",
+		"gpt-3.5-turbo": "GPT-3.5 Turbo 是快速且经济的模型，适合大多数任务",
+		"gpt-3.5-turbo-16k": "GPT-3.5 Turbo 16K 上下文版本",
+		
+		// Anthropic
+		"claude-3-opus": "Claude 3 Opus 是 Anthropic 最强大的模型",
+		"claude-3-sonnet": "Claude 3 Sonnet 平衡了性能和成本",
+		"claude-3-haiku": "Claude 3 Haiku 是最快速的 Claude 模型",
+		"claude-3-5-sonnet": "Claude 3.5 Sonnet 是最新的 Claude 模型",
+		"claude-sonnet-4": "Claude Sonnet 4 是 Anthropic 的最新模型",
+		"claude-sonnet-4-5": "Claude Sonnet 4.5 是 Anthropic 的最新模型",
+		"claude-sonnet-4.5": "Claude Sonnet 4.5 是 Anthropic 的最新模型",
+		"claude-haiku-4": "Claude Haiku 4 是快速且经济的模型",
+		"claude-haiku-4-5": "Claude Haiku 4.5 是快速且经济的模型",
+		"claude-haiku-4.5": "Claude Haiku 4.5 是快速且经济的模型",
+		"claude-opus-4": "Claude Opus 4 是最强大的 Claude 模型",
+		"claude-opus-4-5": "Claude Opus 4.5 是最强大的 Claude 模型",
+		"claude-opus-4.5": "Claude Opus 4.5 是最强大的 Claude 模型",
+		"claude-opus-4-6": "Claude Opus 4.6 是最强大的 Claude 模型",
+		"claude-opus-4.6": "Claude Opus 4.6 是最强大的 Claude 模型",
+		
+		// Gemini
+		"gemini-pro": "Gemini Pro 是 Google 的多模态 AI 模型",
+		"gemini-pro-vision": "Gemini Pro Vision 支持图像理解",
+		"gemini-ultra": "Gemini Ultra 是 Google 最强大的模型",
+		"gemini-1.5-pro": "Gemini 1.5 Pro 支持超长上下文",
+		"gemini-1.5-flash": "Gemini 1.5 Flash 是快速且经济的模型",
+	}
+	
+	if desc, ok := descriptions[modelName]; ok {
+		return desc
+	}
+	
+	// 默认描述
+	return fmt.Sprintf("%s 提供的 %s 模型", provider, modelName)
 }
 
 // FetchModels 从提供商动态获取模型列表

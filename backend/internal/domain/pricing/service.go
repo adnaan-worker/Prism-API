@@ -1,6 +1,7 @@
 package pricing
 
 import (
+	"api-aggregator/backend/internal/domain/apiconfig"
 	"api-aggregator/backend/pkg/errors"
 	"api-aggregator/backend/pkg/logger"
 	"api-aggregator/backend/pkg/query"
@@ -24,15 +25,17 @@ type Service interface {
 
 // service 定价服务实现
 type service struct {
-	repo   Repository
-	logger logger.Logger
+	repo            Repository
+	apiConfigRepo   apiconfig.Repository
+	logger          logger.Logger
 }
 
 // NewService 创建定价服务
-func NewService(repo Repository, logger logger.Logger) Service {
+func NewService(repo Repository, apiConfigRepo apiconfig.Repository, logger logger.Logger) Service {
 	return &service{
-		repo:   repo,
-		logger: logger,
+		repo:          repo,
+		apiConfigRepo: apiConfigRepo,
+		logger:        logger,
 	}
 }
 
@@ -47,8 +50,14 @@ func (s *service) CreatePricing(ctx context.Context, req *CreatePricingRequest) 
 			logger.Error(err))
 		return nil, errors.Wrap(err, 500002, "Failed to check existing pricing")
 	}
+	
 	if existing != nil {
-		return nil, errors.New(409001, "Pricing already exists for this model and API config")
+		// 如果已存在，直接返回
+		s.logger.Info("Pricing already exists, returning existing record",
+			logger.Uint("pricing_id", existing.ID),
+			logger.String("model", req.ModelName),
+			logger.Uint("api_config_id", req.APIConfigID))
+		return existing.ToResponse(), nil
 	}
 
 	// 设置默认值
@@ -157,7 +166,7 @@ func (s *service) GetPricings(ctx context.Context, req *GetPricingsRequest) (*Pr
 	}
 
 	return &PricingListResponse{
-		Pricings: ToResponseList(pricings),
+		Pricings: s.toResponseListWithAPIConfig(ctx, pricings),
 		Total:    total,
 		Page:     req.Page,
 		PageSize: req.PageSize,
@@ -172,7 +181,7 @@ func (s *service) GetAllPricings(ctx context.Context) ([]*PricingResponse, error
 		return nil, errors.Wrap(err, 500002, "Failed to get all pricings")
 	}
 
-	return ToResponseList(pricings), nil
+	return s.toResponseListWithAPIConfig(ctx, pricings), nil
 }
 
 // GetActivePricings 获取所有激活的定价
@@ -183,7 +192,7 @@ func (s *service) GetActivePricings(ctx context.Context) ([]*PricingResponse, er
 		return nil, errors.Wrap(err, 500002, "Failed to get active pricings")
 	}
 
-	return ToResponseList(pricings), nil
+	return s.toResponseListWithAPIConfig(ctx, pricings), nil
 }
 
 // GetPricingsByAPIConfig 根据API配置获取定价
@@ -196,7 +205,7 @@ func (s *service) GetPricingsByAPIConfig(ctx context.Context, apiConfigID uint) 
 		return nil, errors.Wrap(err, 500002, "Failed to get pricings by API config")
 	}
 
-	return ToResponseList(pricings), nil
+	return s.toResponseListWithAPIConfig(ctx, pricings), nil
 }
 
 // GetPricingsByModel 根据模型获取定价
@@ -209,7 +218,7 @@ func (s *service) GetPricingsByModel(ctx context.Context, modelName string) ([]*
 		return nil, errors.Wrap(err, 500002, "Failed to get pricings by model")
 	}
 
-	return ToResponseList(pricings), nil
+	return s.toResponseListWithAPIConfig(ctx, pricings), nil
 }
 
 // UpdatePricing 更新定价
@@ -343,4 +352,52 @@ func (s *service) BatchCreatePricings(ctx context.Context, req *BatchCreatePrici
 		Failed:  failed,
 		Errors:  errorMessages,
 	}, nil
+}
+
+
+// toResponseListWithAPIConfig 转换为响应列表并加载 API 配置信息
+func (s *service) toResponseListWithAPIConfig(ctx context.Context, pricings []*Pricing) []*PricingResponse {
+	if len(pricings) == 0 {
+		return []*PricingResponse{}
+	}
+
+	// 收集所有唯一的 API 配置 ID
+	apiConfigIDs := make(map[uint]bool)
+	for _, p := range pricings {
+		apiConfigIDs[p.APIConfigID] = true
+	}
+
+	// 批量加载 API 配置
+	apiConfigMap := make(map[uint]*apiconfig.APIConfig)
+	for id := range apiConfigIDs {
+		config, err := s.apiConfigRepo.FindByID(ctx, id)
+		if err != nil {
+			s.logger.Warn("Failed to load API config",
+				logger.Uint("api_config_id", id),
+				logger.Error(err))
+			continue
+		}
+		if config != nil {
+			apiConfigMap[id] = config
+		}
+	}
+
+	// 转换为响应对象
+	responses := make([]*PricingResponse, len(pricings))
+	for i, pricing := range pricings {
+		resp := pricing.ToResponse()
+		
+		// 添加 API 配置信息
+		if config, ok := apiConfigMap[pricing.APIConfigID]; ok {
+			resp.APIConfig = &APIConfigInfo{
+				ID:   config.ID,
+				Name: config.Name,
+				Type: config.Type,
+			}
+		}
+		
+		responses[i] = resp
+	}
+
+	return responses
 }

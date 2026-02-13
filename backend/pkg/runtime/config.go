@@ -110,7 +110,6 @@ func (m *Manager) loadFromDatabase() error {
 	
 	err := m.db.Table("settings").
 		Select("key, value").
-		Where("deleted_at IS NULL").
 		Scan(&results).Error
 	
 	if err != nil {

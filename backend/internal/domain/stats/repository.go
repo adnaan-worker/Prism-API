@@ -59,10 +59,10 @@ func (r *repository) GetUserGrowth(ctx context.Context, startDate, endDate time.
 	var results []UserGrowthItem
 	err := r.db.WithContext(ctx).
 		Table("users").
-		Select("DATE(created_at) as date, COUNT(*) as count").
+		Select("TO_CHAR(DATE(created_at), 'YYYY-MM-DD') as date, COUNT(*) as count").
 		Where("created_at >= ? AND created_at < ?", startDate, endDate).
 		Group("DATE(created_at)").
-		Order("date ASC").
+		Order("DATE(created_at) ASC").
 		Scan(&results).Error
 	return results, err
 }
@@ -107,10 +107,10 @@ func (r *repository) GetRequestTrend(ctx context.Context, startDate, endDate tim
 	var results []RequestTrendItem
 	err := r.db.WithContext(ctx).
 		Table("request_logs").
-		Select("DATE(created_at) as date, COUNT(*) as count").
+		Select("TO_CHAR(DATE(created_at), 'YYYY-MM-DD') as date, COUNT(*) as count").
 		Where("created_at >= ? AND created_at < ?", startDate, endDate).
 		Group("DATE(created_at)").
-		Order("date ASC").
+		Order("DATE(created_at) ASC").
 		Scan(&results).Error
 	return results, err
 }
@@ -134,10 +134,10 @@ func (r *repository) GetTokenUsage(ctx context.Context, startDate, endDate time.
 	var results []TokenUsageItem
 	err := r.db.WithContext(ctx).
 		Table("request_logs").
-		Select("DATE(created_at) as date, SUM(tokens_used) as tokens").
+		Select("TO_CHAR(DATE(created_at), 'YYYY-MM-DD') as date, SUM(tokens_used) as tokens").
 		Where("created_at >= ? AND created_at < ?", startDate, endDate).
 		Group("DATE(created_at)").
-		Order("date ASC").
+		Order("DATE(created_at) ASC").
 		Scan(&results).Error
 	return results, err
 }

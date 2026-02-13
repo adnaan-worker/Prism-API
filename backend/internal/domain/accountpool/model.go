@@ -4,11 +4,9 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"time"
-
-	"gorm.io/gorm"
 )
 
-// JSONMap JSON 对象类型
+// JSONMap JSON 瀵硅薄绫诲瀷
 type JSONMap map[string]interface{}
 
 func (j JSONMap) Value() (driver.Value, error) {
@@ -30,62 +28,61 @@ func (j *JSONMap) Scan(value interface{}) error {
 	return json.Unmarshal(bytes, j)
 }
 
-// AccountPool 账号池模型
+// AccountPool 璐﹀彿姹犳ā鍨?
 type AccountPool struct {
-	ID        uint           `gorm:"primarykey" json:"id"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
+	ID        uint      `gorm:"primarykey" json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 
-	// 基本信息
+	// 鍩烘湰淇℃伅
 	Name        string `gorm:"not null;size:255" json:"name"`
 	Description string `gorm:"type:text" json:"description,omitempty"`
 
-	// 提供商类型
+	// 鎻愪緵鍟嗙被鍨?
 	Provider string `gorm:"column:provider_type;not null;size:50" json:"provider"`
 
-	// 轮询策略
+	// 杞绛栫暐
 	Strategy string `gorm:"not null;size:50;default:'round_robin'" json:"strategy"`
 
-	// 健康检查配置
-	HealthCheckInterval int `gorm:"not null;default:300" json:"health_check_interval"` // 秒
-	HealthCheckTimeout  int `gorm:"not null;default:10" json:"health_check_timeout"`   // 秒
+	// 鍋ュ悍妫€鏌ラ厤缃?
+	HealthCheckInterval int `gorm:"not null;default:300" json:"health_check_interval"` // 绉?
+	HealthCheckTimeout  int `gorm:"not null;default:10" json:"health_check_timeout"`   // 绉?
 	MaxRetries          int `gorm:"not null;default:3" json:"max_retries"`
 
-	// 状态
+	// 鐘舵€?
 	IsActive bool `gorm:"column:is_active;not null;default:true" json:"is_active"`
 
-	// 统计
+	// 缁熻
 	TotalRequests int64 `gorm:"not null;default:0" json:"total_requests"`
 	TotalErrors   int64 `gorm:"not null;default:0" json:"total_errors"`
 }
 
-// TableName 指定表名
+// TableName 鎸囧畾琛ㄥ悕
 func (AccountPool) TableName() string {
 	return "account_pools"
 }
 
-// Activate 激活账号池
+// Activate 婵€娲昏处鍙锋睜
 func (p *AccountPool) Activate() {
 	p.IsActive = true
 }
 
-// Deactivate 停用账号池
+// Deactivate 鍋滅敤璐﹀彿姹?
 func (p *AccountPool) Deactivate() {
 	p.IsActive = false
 }
 
-// IncrementRequests 增加请求计数
+// IncrementRequests 澧炲姞璇锋眰璁℃暟
 func (p *AccountPool) IncrementRequests() {
 	p.TotalRequests++
 }
 
-// IncrementErrors 增加错误计数
+// IncrementErrors 澧炲姞閿欒璁℃暟
 func (p *AccountPool) IncrementErrors() {
 	p.TotalErrors++
 }
 
-// GetErrorRate 获取错误率
+// GetErrorRate 鑾峰彇閿欒鐜?
 func (p *AccountPool) GetErrorRate() float64 {
 	if p.TotalRequests == 0 {
 		return 0
@@ -93,12 +90,12 @@ func (p *AccountPool) GetErrorRate() float64 {
 	return float64(p.TotalErrors) / float64(p.TotalRequests)
 }
 
-// IsHealthy 检查是否健康
+// IsHealthy 妫€鏌ユ槸鍚﹀仴搴?
 func (p *AccountPool) IsHealthy() bool {
 	return p.IsActive && p.GetErrorRate() < 0.5
 }
 
-// AccountPoolRequestLog 账号池请求日志模型
+// AccountPoolRequestLog 璐﹀彿姹犺姹傛棩蹇楁ā鍨?
 type AccountPoolRequestLog struct {
 	ID        uint      `gorm:"primarykey" json:"id"`
 	CreatedAt time.Time `json:"created_at"`
@@ -107,38 +104,38 @@ type AccountPoolRequestLog struct {
 	PoolID       *uint  `gorm:"index" json:"pool_id,omitempty"`
 	Provider     string `gorm:"column:provider_type;not null;size:50" json:"provider"`
 
-	// 请求信息
+	// 璇锋眰淇℃伅
 	Model      string `gorm:"not null;size:255" json:"model"`
 	Method     string `gorm:"not null;size:10" json:"method"`
 	StatusCode int    `json:"status_code,omitempty"`
 
-	// 性能
-	ResponseTime int `json:"response_time,omitempty"` // 毫秒
+	// 鎬ц兘
+	ResponseTime int `json:"response_time,omitempty"` // 姣
 	TokensUsed   int `json:"tokens_used,omitempty"`
 
-	// 错误信息
+	// 閿欒淇℃伅
 	ErrorMessage string `gorm:"type:text" json:"error_message,omitempty"`
 
-	// 关联主请求日志
+	// 鍏宠仈涓昏姹傛棩蹇?
 	RequestLogID *uint `gorm:"index" json:"request_log_id,omitempty"`
 }
 
-// TableName 指定表名
+// TableName 鎸囧畾琛ㄥ悕
 func (AccountPoolRequestLog) TableName() string {
 	return "account_pool_request_logs"
 }
 
-// IsSuccess 检查请求是否成功
+// IsSuccess 妫€鏌ヨ姹傛槸鍚︽垚鍔?
 func (l *AccountPoolRequestLog) IsSuccess() bool {
 	return l.StatusCode >= 200 && l.StatusCode < 300
 }
 
-// IsError 检查请求是否失败
+// IsError 妫€鏌ヨ姹傛槸鍚﹀け璐?
 func (l *AccountPoolRequestLog) IsError() bool {
 	return l.StatusCode >= 400 || l.ErrorMessage != ""
 }
 
-// 账号池策略常量
+// 璐﹀彿姹犵瓥鐣ュ父閲?
 const (
 	StrategyRoundRobin         = "round_robin"
 	StrategyWeightedRoundRobin = "weighted_round_robin"
@@ -146,7 +143,7 @@ const (
 	StrategyRandom             = "random"
 )
 
-// ValidStrategies 有效的账号池策略列表
+// ValidStrategies 鏈夋晥鐨勮处鍙锋睜绛栫暐鍒楄〃
 var ValidStrategies = []string{
 	StrategyRoundRobin,
 	StrategyWeightedRoundRobin,
@@ -154,7 +151,7 @@ var ValidStrategies = []string{
 	StrategyRandom,
 }
 
-// IsValidStrategy 检查策略是否有效
+// IsValidStrategy 妫€鏌ョ瓥鐣ユ槸鍚︽湁鏁?
 func IsValidStrategy(strategy string) bool {
 	for _, s := range ValidStrategies {
 		if s == strategy {
@@ -164,70 +161,69 @@ func IsValidStrategy(strategy string) bool {
 	return false
 }
 
-// AccountCredential 账号凭据模型
+// AccountCredential 璐﹀彿鍑嵁妯″瀷
 type AccountCredential struct {
-	ID        uint           `gorm:"primarykey" json:"id"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
+	ID        uint      `gorm:"primarykey" json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 
-	// 关联账号池
+	// 鍏宠仈璐﹀彿姹?
 	PoolID uint `gorm:"not null;index" json:"pool_id"`
 
-	// 提供商类型
+	// 鎻愪緵鍟嗙被鍨?
 	Provider string `gorm:"column:provider_type;not null;size:50" json:"provider"`
 
-	// 认证类型
+	// 璁よ瘉绫诲瀷
 	AuthType string `gorm:"not null;size:50;default:'api_key'" json:"auth_type"` // api_key, oauth
 
-	// 凭据信息（加密存储）
+	// 鍑嵁淇℃伅锛堝姞瀵嗗瓨鍌級
 	APIKey       string `gorm:"type:text" json:"api_key,omitempty"`
 	AccessToken  string `gorm:"type:text" json:"access_token,omitempty"`
 	RefreshToken string `gorm:"type:text" json:"refresh_token,omitempty"`
 
-	// OAuth 相关
+	// OAuth 鐩稿叧
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 
-	// 扩展信息（JSON 存储，不同提供商可以存储不同的数据）
+	// 鎵╁睍淇℃伅锛圝SON 瀛樺偍锛屼笉鍚屾彁渚涘晢鍙互瀛樺偍涓嶅悓鐨勬暟鎹級
 	Metadata JSONMap `gorm:"type:jsonb;default:'{}'" json:"metadata,omitempty"`
 
-	// 权重（用于加权轮询）
+	// 鏉冮噸锛堢敤浜庡姞鏉冭疆璇級
 	Weight int `gorm:"not null;default:1" json:"weight"`
 
-	// 状态
+	// 鐘舵€?
 	IsActive bool `gorm:"column:is_active;not null;default:true" json:"is_active"`
 
-	// 健康状态
+	// 鍋ュ悍鐘舵€?
 	HealthStatus string     `gorm:"size:50;default:'unknown'" json:"health_status"` // healthy, unhealthy, unknown
 	LastError    string     `gorm:"type:text" json:"last_error,omitempty"`
 	LastUsedAt   *time.Time `json:"last_used_at,omitempty"`
 
-	// 统计
+	// 缁熻
 	TotalRequests int64 `gorm:"not null;default:0" json:"total_requests"`
 	TotalErrors   int64 `gorm:"not null;default:0" json:"total_errors"`
 
-	// 速率限制
-	RateLimit        int        `gorm:"not null;default:0" json:"rate_limit"`         // 每分钟请求数，0表示无限制
-	CurrentUsage     int        `gorm:"not null;default:0" json:"current_usage"`      // 当前分钟使用量
+	// 閫熺巼闄愬埗
+	RateLimit        int        `gorm:"not null;default:0" json:"rate_limit"`         // 姣忓垎閽熻姹傛暟锛?琛ㄧず鏃犻檺鍒?
+	CurrentUsage     int        `gorm:"not null;default:0" json:"current_usage"`      // 褰撳墠鍒嗛挓浣跨敤閲?
 	RateLimitResetAt *time.Time `json:"rate_limit_reset_at,omitempty"`
 }
 
-// TableName 指定表名
+// TableName 鎸囧畾琛ㄥ悕
 func (AccountCredential) TableName() string {
 	return "account_credentials"
 }
 
-// Activate 激活凭据
+// Activate 婵€娲诲嚟鎹?
 func (c *AccountCredential) Activate() {
 	c.IsActive = true
 }
 
-// Deactivate 停用凭据
+// Deactivate 鍋滅敤鍑嵁
 func (c *AccountCredential) Deactivate() {
 	c.IsActive = false
 }
 
-// IsExpired 检查是否过期
+// IsExpired 妫€鏌ユ槸鍚﹁繃鏈?
 func (c *AccountCredential) IsExpired() bool {
 	if c.ExpiresAt == nil {
 		return false
@@ -235,26 +231,26 @@ func (c *AccountCredential) IsExpired() bool {
 	return time.Now().After(*c.ExpiresAt)
 }
 
-// IsHealthy 检查是否健康
+// IsHealthy 妫€鏌ユ槸鍚﹀仴搴?
 func (c *AccountCredential) IsHealthy() bool {
-	// 允许 unknown 状态的凭据（新导入的凭据）
-	// 只有明确标记为 unhealthy 的才拒绝
+	// 鍏佽 unknown 鐘舵€佺殑鍑嵁锛堟柊瀵煎叆鐨勫嚟鎹級
+	// 鍙湁鏄庣‘鏍囪涓?unhealthy 鐨勬墠鎷掔粷
 	return c.IsActive && c.HealthStatus != "unhealthy" && !c.IsExpired()
 }
 
-// IncrementRequests 增加请求计数
+// IncrementRequests 澧炲姞璇锋眰璁℃暟
 func (c *AccountCredential) IncrementRequests() {
 	c.TotalRequests++
 	now := time.Now()
 	c.LastUsedAt = &now
 }
 
-// IncrementErrors 增加错误计数
+// IncrementErrors 澧炲姞閿欒璁℃暟
 func (c *AccountCredential) IncrementErrors() {
 	c.TotalErrors++
 }
 
-// GetErrorRate 获取错误率
+// GetErrorRate 鑾峰彇閿欒鐜?
 func (c *AccountCredential) GetErrorRate() float64 {
 	if c.TotalRequests == 0 {
 		return 0
@@ -262,18 +258,18 @@ func (c *AccountCredential) GetErrorRate() float64 {
 	return float64(c.TotalErrors) / float64(c.TotalRequests)
 }
 
-// UpdateHealthStatus 更新健康状态
+// UpdateHealthStatus 鏇存柊鍋ュ悍鐘舵€?
 func (c *AccountCredential) UpdateHealthStatus(status string) {
 	c.HealthStatus = status
 }
 
-// IsRateLimited 检查是否达到速率限制
+// IsRateLimited 妫€鏌ユ槸鍚﹁揪鍒伴€熺巼闄愬埗
 func (c *AccountCredential) IsRateLimited() bool {
 	if c.RateLimit == 0 {
 		return false
 	}
 	
-	// 检查是否需要重置
+	// 妫€鏌ユ槸鍚﹂渶瑕侀噸缃?
 	if c.RateLimitResetAt != nil && time.Now().After(*c.RateLimitResetAt) {
 		return false
 	}
@@ -281,9 +277,9 @@ func (c *AccountCredential) IsRateLimited() bool {
 	return c.CurrentUsage >= c.RateLimit
 }
 
-// IncrementUsage 增加使用量
+// IncrementUsage 澧炲姞浣跨敤閲?
 func (c *AccountCredential) IncrementUsage() {
-	// 如果需要重置
+	// 濡傛灉闇€瑕侀噸缃?
 	if c.RateLimitResetAt == nil || time.Now().After(*c.RateLimitResetAt) {
 		c.CurrentUsage = 1
 		resetAt := time.Now().Add(time.Minute)
@@ -293,19 +289,19 @@ func (c *AccountCredential) IncrementUsage() {
 	}
 }
 
-// 认证类型常量
+// 璁よ瘉绫诲瀷甯搁噺
 const (
 	AuthTypeAPIKey = "api_key"
 	AuthTypeOAuth  = "oauth"
 )
 
-// ValidAuthTypes 有效的认证类型列表
+// ValidAuthTypes 鏈夋晥鐨勮璇佺被鍨嬪垪琛?
 var ValidAuthTypes = []string{
 	AuthTypeAPIKey,
 	AuthTypeOAuth,
 }
 
-// IsValidAuthType 检查认证类型是否有效
+// IsValidAuthType 妫€鏌ヨ璇佺被鍨嬫槸鍚︽湁鏁?
 func IsValidAuthType(authType string) bool {
 	for _, t := range ValidAuthTypes {
 		if t == authType {
@@ -315,7 +311,7 @@ func IsValidAuthType(authType string) bool {
 	return false
 }
 
-// 健康状态常量
+// 鍋ュ悍鐘舵€佸父閲?
 const (
 	HealthStatusHealthy   = "healthy"
 	HealthStatusUnhealthy = "unhealthy"

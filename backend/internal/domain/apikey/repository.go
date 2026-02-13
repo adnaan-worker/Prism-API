@@ -43,7 +43,7 @@ func (r *repository) Update(ctx context.Context, apiKey *APIKey) error {
 	return r.db.WithContext(ctx).Save(apiKey).Error
 }
 
-// Delete 删除API密钥（软删除）
+// Delete 删除API密钥
 func (r *repository) Delete(ctx context.Context, id uint) error {
 	return r.db.WithContext(ctx).Delete(&APIKey{}, id).Error
 }
