@@ -4,7 +4,14 @@ import (
 	"api-aggregator/backend/pkg/errors"
 	"api-aggregator/backend/pkg/logger"
 	"api-aggregator/backend/pkg/query"
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"time"
 )
 
 // Service API配置服务接口
@@ -22,6 +29,7 @@ type Service interface {
 	BatchDeleteConfigs(ctx context.Context, ids []uint) (*BatchOperationResponse, error)
 	BatchActivateConfigs(ctx context.Context, ids []uint) (*BatchOperationResponse, error)
 	BatchDeactivateConfigs(ctx context.Context, ids []uint) (*BatchOperationResponse, error)
+	FetchModels(ctx context.Context, req *FetchModelsRequest) (*FetchModelsResponse, error)
 }
 
 // service API配置服务实现
@@ -404,4 +412,250 @@ func (s *service) BatchDeactivateConfigs(ctx context.Context, ids []uint) (*Batc
 		Message: "Configurations deactivated successfully",
 		Count:   len(ids),
 	}, nil
+}
+
+// FetchModels 从提供商动态获取模型列表
+func (s *service) FetchModels(ctx context.Context, req *FetchModelsRequest) (*FetchModelsResponse, error) {
+	var models []*ModelInfo
+	var err error
+
+	// 根据不同的提供商调用相应的 API
+	switch req.Provider {
+	case "openai":
+		models, err = s.fetchOpenAIModels(ctx, req)
+	case "anthropic":
+		models, err = s.fetchAnthropicModels(ctx, req)
+	case "gemini":
+		models, err = s.fetchGeminiModels(ctx, req)
+	default:
+		return nil, errors.NewValidationError("unsupported provider", map[string]string{
+			"provider": "must be one of: openai, anthropic, gemini",
+		})
+	}
+
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to fetch models from provider")
+	}
+
+	return &FetchModelsResponse{
+		Provider: req.Provider,
+		Models:   models,
+		Count:    len(models),
+	}, nil
+}
+
+// fetchOpenAIModels 从 OpenAI API 获取模型列表
+func (s *service) fetchOpenAIModels(ctx context.Context, req *FetchModelsRequest) ([]*ModelInfo, error) {
+	baseURL := req.BaseURL
+	if baseURL == "" {
+		baseURL = "https://api.openai.com/v1"
+	}
+
+	// 创建 HTTP 客户端
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	// 构建请求
+	reqURL := baseURL + "/models"
+	httpReq, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	httpReq.Header.Set("Authorization", "Bearer "+req.APIKey)
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	// 发送请求
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("OpenAI API error (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	// 解析响应
+	var result struct {
+		Data []struct {
+			ID      string `json:"id"`
+			Object  string `json:"object"`
+			Created int64  `json:"created"`
+			OwnedBy string `json:"owned_by"`
+		} `json:"data"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	// 转换为 ModelInfo
+	models := make([]*ModelInfo, 0, len(result.Data))
+	for _, m := range result.Data {
+		// 只返回 GPT 和 O1 模型
+		if strings.HasPrefix(m.ID, "gpt-") || strings.HasPrefix(m.ID, "o1") {
+			capabilities := []string{"chat", "completion"}
+			if strings.Contains(m.ID, "vision") || strings.Contains(m.ID, "4o") {
+				capabilities = append(capabilities, "vision")
+			}
+			if strings.HasPrefix(m.ID, "o1") {
+				capabilities = append(capabilities, "reasoning")
+			}
+
+			models = append(models, &ModelInfo{
+				ID:           m.ID,
+				Name:         formatModelName(m.ID),
+				Provider:     "openai",
+				Capabilities: capabilities,
+			})
+		}
+	}
+
+	return models, nil
+}
+
+// fetchAnthropicModels 从 Anthropic API 获取模型列表
+func (s *service) fetchAnthropicModels(ctx context.Context, req *FetchModelsRequest) ([]*ModelInfo, error) {
+	// Anthropic 没有公开的 list models API，返回已知的模型列表
+	// 但我们可以通过测试 API 连接来验证 API Key 是否有效
+	baseURL := req.BaseURL
+	if baseURL == "" {
+		baseURL = "https://api.anthropic.com"
+	}
+
+	// 验证 API Key（通过发送一个最小的请求）
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	testBody := map[string]interface{}{
+		"model":      "claude-3-haiku-20240307",
+		"max_tokens": 1,
+		"messages": []map[string]string{
+			{"role": "user", "content": "Hi"},
+		},
+	}
+
+	bodyBytes, _ := json.Marshal(testBody)
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/v1/messages", bytes.NewReader(bodyBytes))
+	if err != nil {
+		return nil, err
+	}
+
+	httpReq.Header.Set("x-api-key", req.APIKey)
+	httpReq.Header.Set("anthropic-version", "2023-06-01")
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// 如果返回 401，说明 API Key 无效
+	if resp.StatusCode == http.StatusUnauthorized {
+		return nil, fmt.Errorf("invalid API key")
+	}
+
+	// 返回已知的 Claude 模型列表
+	return []*ModelInfo{
+		{ID: "claude-3-opus-20240229", Name: "Claude 3 Opus", Provider: "anthropic", Capabilities: []string{"chat", "completion", "vision"}},
+		{ID: "claude-3-sonnet-20240229", Name: "Claude 3 Sonnet", Provider: "anthropic", Capabilities: []string{"chat", "completion", "vision"}},
+		{ID: "claude-3-haiku-20240307", Name: "Claude 3 Haiku", Provider: "anthropic", Capabilities: []string{"chat", "completion", "vision"}},
+		{ID: "claude-3-5-sonnet-20241022", Name: "Claude 3.5 Sonnet", Provider: "anthropic", Capabilities: []string{"chat", "completion", "vision"}},
+		{ID: "claude-3-5-sonnet-20240620", Name: "Claude 3.5 Sonnet (Legacy)", Provider: "anthropic", Capabilities: []string{"chat", "completion", "vision"}},
+		{ID: "claude-3-5-haiku-20241022", Name: "Claude 3.5 Haiku", Provider: "anthropic", Capabilities: []string{"chat", "completion"}},
+		{ID: "claude-sonnet-4-5", Name: "Claude Sonnet 4.5", Provider: "anthropic", Capabilities: []string{"chat", "completion", "vision"}},
+	}, nil
+}
+
+// fetchGeminiModels 从 Google Gemini API 获取模型列表
+func (s *service) fetchGeminiModels(ctx context.Context, req *FetchModelsRequest) ([]*ModelInfo, error) {
+	baseURL := req.BaseURL
+	if baseURL == "" {
+		baseURL = "https://generativelanguage.googleapis.com"
+	}
+
+	// 创建 HTTP 客户端
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	// 构建请求 - Gemini 使用 API Key 作为查询参数
+	reqURL := fmt.Sprintf("%s/v1beta/models?key=%s", baseURL, req.APIKey)
+	httpReq, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	// 发送请求
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("Gemini API error (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	// 解析响应
+	var result struct {
+		Models []struct {
+			Name                       string   `json:"name"`
+			DisplayName                string   `json:"displayName"`
+			Description                string   `json:"description"`
+			SupportedGenerationMethods []string `json:"supportedGenerationMethods"`
+		} `json:"models"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	// 转换为 ModelInfo
+	models := make([]*ModelInfo, 0, len(result.Models))
+	for _, m := range result.Models {
+		// 提取模型 ID（去掉 "models/" 前缀）
+		modelID := strings.TrimPrefix(m.Name, "models/")
+
+		// 只返回 gemini 模型
+		if strings.HasPrefix(modelID, "gemini-") {
+			capabilities := []string{"chat", "completion"}
+			if strings.Contains(modelID, "vision") || strings.Contains(modelID, "pro-vision") {
+				capabilities = append(capabilities, "vision")
+			}
+
+			models = append(models, &ModelInfo{
+				ID:           modelID,
+				Name:         m.DisplayName,
+				Description:  m.Description,
+				Provider:     "gemini",
+				Capabilities: capabilities,
+			})
+		}
+	}
+
+	return models, nil
+}
+
+// formatModelName 格式化模型名称
+func formatModelName(id string) string {
+	// 将 gpt-4-turbo 转换为 GPT-4 Turbo
+	parts := strings.Split(id, "-")
+	formatted := make([]string, len(parts))
+	for i, part := range parts {
+		if part == "gpt" || part == "o1" {
+			formatted[i] = strings.ToUpper(part)
+		} else {
+			formatted[i] = strings.Title(part)
+		}
+	}
+	return strings.Join(formatted, " ")
 }

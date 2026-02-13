@@ -26,18 +26,18 @@ export const statsService = {
 
   // 获取请求趋势
   getRequestTrend: async (days: number = 7): Promise<RequestTrend[]> => {
-    const response = await apiClient.get<RequestTrend[]>('/admin/stats/trend', {
+    const response = await apiClient.get<{ trend: RequestTrend[]; days: number }>('/admin/stats/trend', {
       params: { days },
     });
-    return response.data;
+    return response.data.trend || [];
   },
 
   // 获取模型使用排行
   getModelUsage: async (limit: number = 10): Promise<ModelUsage[]> => {
-    const response = await apiClient.get<ModelUsage[]>('/admin/stats/models', {
+    const response = await apiClient.get<{ usage: ModelUsage[]; total: number }>('/admin/stats/models', {
       params: { limit },
     });
-    return response.data;
+    return response.data.usage || [];
   },
 
   // 获取最近日志

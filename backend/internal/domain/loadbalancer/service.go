@@ -1,6 +1,7 @@
 package loadbalancer
 
 import (
+	"api-aggregator/backend/internal/domain/apiconfig"
 	"api-aggregator/backend/pkg/errors"
 	"api-aggregator/backend/pkg/query"
 	"context"
@@ -14,18 +15,21 @@ type Service interface {
 	GetConfig(ctx context.Context, id uint) (*ConfigResponse, error)
 	GetConfigByModel(ctx context.Context, modelName string) (*ConfigResponse, error)
 	ListConfigs(ctx context.Context, filter *ConfigFilter, opts *query.Options) (*ConfigListResponse, error)
+	GetModelEndpoints(ctx context.Context, modelName string) (*ModelEndpointsResponse, error)
 	ActivateConfig(ctx context.Context, id uint) error
 	DeactivateConfig(ctx context.Context, id uint) error
 }
 
 type service struct {
-	repo Repository
+	repo            Repository
+	apiConfigRepo   apiconfig.Repository
 }
 
 // NewService 创建负载均衡配置服务实例
-func NewService(repo Repository) Service {
+func NewService(repo Repository, apiConfigRepo apiconfig.Repository) Service {
 	return &service{
-		repo: repo,
+		repo:          repo,
+		apiConfigRepo: apiConfigRepo,
 	}
 }
 
@@ -166,4 +170,52 @@ func (s *service) DeactivateConfig(ctx context.Context, id uint) error {
 	}
 
 	return nil
+}
+
+// GetModelEndpoints 获取模型的所有端点信息
+func (s *service) GetModelEndpoints(ctx context.Context, modelName string) (*ModelEndpointsResponse, error) {
+	// 获取所有激活的 API 配置
+	configs, err := s.apiConfigRepo.FindActive(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get API configs")
+	}
+
+	// 筛选包含该模型的配置
+	endpoints := make([]*EndpointInfo, 0)
+	for _, config := range configs {
+		// 检查配置的 models 数组是否包含该模型
+		hasModel := false
+		for _, m := range config.Models {
+			if m == modelName {
+				hasModel = true
+				break
+			}
+		}
+
+		if hasModel {
+			endpoint := &EndpointInfo{
+				ConfigID:     config.ID,
+				ConfigName:   config.Name,
+				Type:         config.Type,
+				BaseURL:      config.BaseURL,
+				Priority:     config.Priority,
+				Weight:       config.Weight,
+				IsActive:     config.IsActive,
+				HealthStatus: "unknown",
+			}
+
+			// 如果配置激活，设置为健康状态
+			if config.IsActive {
+				endpoint.HealthStatus = "healthy"
+			}
+
+			endpoints = append(endpoints, endpoint)
+		}
+	}
+
+	return &ModelEndpointsResponse{
+		ModelName: modelName,
+		Endpoints: endpoints,
+		Total:     len(endpoints),
+	}, nil
 }

@@ -19,6 +19,16 @@ type Repository interface {
 	IncrementRequests(ctx context.Context, id uint) error
 	IncrementErrors(ctx context.Context, id uint) error
 	
+	// 凭据相关
+	CreateCredential(ctx context.Context, cred *AccountCredential) error
+	UpdateCredential(ctx context.Context, cred *AccountCredential) error
+	DeleteCredential(ctx context.Context, id uint) error
+	FindCredentialByID(ctx context.Context, id uint) (*AccountCredential, error)
+	ListCredentials(ctx context.Context, filter *CredentialFilter, opts *query.Options) ([]*AccountCredential, int64, error)
+	UpdateCredentialStatus(ctx context.Context, id uint, isActive bool) error
+	IncrementCredentialRequests(ctx context.Context, id uint) error
+	IncrementCredentialErrors(ctx context.Context, id uint) error
+	
 	// 请求日志相关
 	CreateRequestLog(ctx context.Context, log *AccountPoolRequestLog) error
 	ListRequestLogs(ctx context.Context, filter *RequestLogFilter, opts *query.Options) ([]*AccountPoolRequestLog, int64, error)
@@ -213,4 +223,100 @@ func (r *repository) GetPoolRequestStats(ctx context.Context, poolID uint) (map[
 		"avg_response":   stats.AvgResponse,
 		"total_tokens":   stats.TotalTokens,
 	}, nil
+}
+
+// CreateCredential 创建凭据
+func (r *repository) CreateCredential(ctx context.Context, cred *AccountCredential) error {
+	return r.db.WithContext(ctx).Create(cred).Error
+}
+
+// UpdateCredential 更新凭据
+func (r *repository) UpdateCredential(ctx context.Context, cred *AccountCredential) error {
+	return r.db.WithContext(ctx).Save(cred).Error
+}
+
+// DeleteCredential 删除凭据
+func (r *repository) DeleteCredential(ctx context.Context, id uint) error {
+	return r.db.WithContext(ctx).Delete(&AccountCredential{}, id).Error
+}
+
+// FindCredentialByID 根据ID查找凭据
+func (r *repository) FindCredentialByID(ctx context.Context, id uint) (*AccountCredential, error) {
+	var cred AccountCredential
+	err := r.db.WithContext(ctx).First(&cred, id).Error
+	if err != nil {
+		return nil, err
+	}
+	return &cred, nil
+}
+
+// ListCredentials 查询凭据列表
+func (r *repository) ListCredentials(ctx context.Context, filter *CredentialFilter, opts *query.Options) ([]*AccountCredential, int64, error) {
+	var creds []*AccountCredential
+	var total int64
+
+	db := r.db.WithContext(ctx).Model(&AccountCredential{})
+
+	// 应用过滤器
+	if filter != nil {
+		if filter.PoolID != nil {
+			db = db.Where("pool_id = ?", *filter.PoolID)
+		}
+		if filter.Provider != nil {
+			db = db.Where("provider_type = ?", *filter.Provider)
+		}
+		if filter.AuthType != nil {
+			db = db.Where("auth_type = ?", *filter.AuthType)
+		}
+		if filter.IsActive != nil {
+			db = db.Where("is_active = ?", *filter.IsActive)
+		}
+		if filter.HealthStatus != nil {
+			db = db.Where("health_status = ?", *filter.HealthStatus)
+		}
+	}
+
+	// 计算总数
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// 应用查询选项
+	if opts != nil {
+		db = query.ApplyOptions(db, opts)
+	}
+
+	// 查询数据
+	if err := db.Find(&creds).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return creds, total, nil
+}
+
+// UpdateCredentialStatus 更新凭据状态
+func (r *repository) UpdateCredentialStatus(ctx context.Context, id uint, isActive bool) error {
+	return r.db.WithContext(ctx).
+		Model(&AccountCredential{}).
+		Where("id = ?", id).
+		Update("is_active", isActive).
+		Error
+}
+
+// IncrementCredentialRequests 增加凭据请求计数
+func (r *repository) IncrementCredentialRequests(ctx context.Context, id uint) error {
+	return r.db.WithContext(ctx).
+		Model(&AccountCredential{}).
+		Where("id = ?", id).
+		UpdateColumn("total_requests", gorm.Expr("total_requests + ?", 1)).
+		Error
+}
+
+// IncrementCredentialErrors 增加凭据错误计数
+func (r *repository) IncrementCredentialErrors(ctx context.Context, id uint) error {
+	return r.db.WithContext(ctx).
+		Model(&AccountCredential{}).
+		Where("id = ?", id).
+		UpdateColumn("total_errors", gorm.Expr("total_errors + ?", 1)).
+		Error
 }

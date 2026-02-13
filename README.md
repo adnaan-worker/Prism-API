@@ -274,7 +274,7 @@ npm run dev
 
 ```env
 # 数据库
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/prism_api?sslmode=disable
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/api_aggregator?sslmode=disable
 DB_MAX_OPEN_CONNS=25
 DB_MAX_IDLE_CONNS=5
 DB_CONN_MAX_LIFETIME=5m

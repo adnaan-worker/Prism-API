@@ -11,6 +11,7 @@ import (
 	"api-aggregator/backend/internal/domain/log"
 	"api-aggregator/backend/internal/domain/pricing"
 	"api-aggregator/backend/internal/domain/quota"
+	"api-aggregator/backend/internal/domain/settings"
 	"api-aggregator/backend/internal/domain/stats"
 	"api-aggregator/backend/internal/domain/user"
 	"api-aggregator/backend/internal/middleware"
@@ -163,6 +164,7 @@ func (app *App) initRouter() error {
 	cacheRepo := cache.NewRepository(app.DB)
 	loadBalancerRepo := loadbalancer.NewRepository(app.DB)
 	accountPoolRepo := accountpool.NewRepository(app.DB)
+	settingsRepo := settings.NewRepository(app.DB)
 
 	// 初始化服务层
 	userService := user.NewService(userRepo, *app.Logger)
@@ -174,8 +176,9 @@ func (app *App) initRouter() error {
 	logService := log.NewService(logRepo, *app.Logger)
 	statsService := stats.NewService(statsRepo, *app.Logger)
 	cacheService := cache.NewService(cacheRepo, *app.Logger)
-	loadBalancerService := loadbalancer.NewService(loadBalancerRepo)
+	loadBalancerService := loadbalancer.NewService(loadBalancerRepo, apiConfigRepo)
 	accountPoolService := accountpool.NewService(accountPoolRepo)
+	settingsService := settings.NewService(settingsRepo, userRepo)
 
 	// 初始化处理器层
 	authHandler := auth.NewHandler(authService)
@@ -189,6 +192,7 @@ func (app *App) initRouter() error {
 	cacheHandler := cache.NewHandler(cacheService)
 	loadBalancerHandler := loadbalancer.NewHandler(loadBalancerService)
 	accountPoolHandler := accountpool.NewHandler(accountPoolService)
+	settingsHandler := settings.NewHandler(settingsService)
 
 	// 初始化中间件管理器
 	mw := middleware.NewManager(&middleware.Config{
@@ -223,6 +227,7 @@ func (app *App) initRouter() error {
 		CacheHandler:        cacheHandler,
 		LoadBalancerHandler: loadBalancerHandler,
 		AccountPoolHandler:  accountPoolHandler,
+		SettingsHandler:     settingsHandler,
 	})
 
 	// 设置路由

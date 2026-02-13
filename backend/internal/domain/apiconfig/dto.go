@@ -109,3 +109,26 @@ func ToResponseList(configs []*APIConfig) []*ConfigResponse {
 	}
 	return responses
 }
+
+// FetchModelsRequest 获取模型列表请求
+type FetchModelsRequest struct {
+	Provider string `json:"provider" binding:"required"` // openai, anthropic, gemini, etc.
+	APIKey   string `json:"api_key" binding:"required"`
+	BaseURL  string `json:"base_url"`
+}
+
+// ModelInfo 模型信息
+type ModelInfo struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description,omitempty"`
+	Provider    string   `json:"provider"`
+	Capabilities []string `json:"capabilities,omitempty"`
+}
+
+// FetchModelsResponse 获取模型列表响应
+type FetchModelsResponse struct {
+	Provider string       `json:"provider"`
+	Models   []*ModelInfo `json:"models"`
+	Count    int          `json:"count"`
+}

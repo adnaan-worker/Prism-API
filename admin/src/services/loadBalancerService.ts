@@ -35,18 +35,19 @@ export interface UpdateLoadBalancerConfigRequest {
 export const loadBalancerService = {
   // 获取负载均衡配置列表
   getConfigs: async (): Promise<LoadBalancerConfig[]> => {
-    const response = await apiClient.get<LoadBalancerConfig[]>(
+    const response = await apiClient.get<{ configs: LoadBalancerConfig[]; total: number }>(
       '/admin/load-balancer/configs'
     );
-    return response.data;
+    // 后端返回 { configs: [...], total: 10 }，拦截器已提取 data
+    return response.data?.configs || [];
   },
 
   // 获取指定模型的端点列表
   getModelEndpoints: async (modelName: string): Promise<ModelEndpoint[]> => {
-    const response = await apiClient.get<ModelEndpoint[]>(
+    const response = await apiClient.get<{ endpoints: ModelEndpoint[]; total: number }>(
       `/admin/load-balancer/models/${modelName}/endpoints`
     );
-    return response.data;
+    return response.data?.endpoints || [];
   },
 
   // 创建负载均衡配置
@@ -77,9 +78,14 @@ export const loadBalancerService = {
     await apiClient.delete(`/admin/load-balancer/configs/${id}`);
   },
 
-  // 获取可用模型列表
+  // 获取可用模型列表（从配置中提取）
   getAvailableModels: async (): Promise<string[]> => {
-    const response = await apiClient.get<string[]>('/admin/models');
-    return response.data;
+    const response = await apiClient.get<{ configs: LoadBalancerConfig[]; total: number }>(
+      '/admin/load-balancer/configs'
+    );
+    const configs = response.data?.configs || [];
+    // 提取所有唯一的模型名称
+    const models = Array.from(new Set(configs.map(c => c.model_name)));
+    return models;
   },
 };

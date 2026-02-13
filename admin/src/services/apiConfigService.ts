@@ -69,7 +69,7 @@ export const apiConfigService = {
   // 启用/禁用API配置
   toggleConfigStatus: async (id: number, is_active: boolean): Promise<APIConfig> => {
     const endpoint = is_active ? 'activate' : 'deactivate';
-    const response = await apiClient.put<APIConfig>(
+    const response = await apiClient.post<APIConfig>(
       `/admin/api-configs/${id}/${endpoint}`
     );
     return response.data;

@@ -7,7 +7,7 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_DB: prism_api
+      POSTGRES_DB: api_aggregator
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     volumes:
@@ -64,7 +64,7 @@ services:
         condition: service_healthy
     environment:
       # Database
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/prism_api?sslmode=disable
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/api_aggregator?sslmode=disable
       DB_MAX_OPEN_CONNS: 25
       DB_MAX_IDLE_CONNS: 5
       DB_CONN_MAX_LIFETIME: 5m

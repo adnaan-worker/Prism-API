@@ -395,3 +395,27 @@ func (h *Handler) BatchDeactivateConfigs(c *gin.Context) {
 
 	response.Success(c, result)
 }
+
+// FetchModels 从提供商动态获取模型列表
+// @Summary 从提供商动态获取模型列表
+// @Tags APIConfig
+// @Accept json
+// @Produce json
+// @Param request body FetchModelsRequest true "获取模型请求"
+// @Success 200 {object} FetchModelsResponse
+// @Router /api/v1/admin/providers/fetch-models [post]
+func (h *Handler) FetchModels(c *gin.Context) {
+	var req FetchModelsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.ValidationError(c, err)
+		return
+	}
+
+	result, err := h.service.FetchModels(c.Request.Context(), &req)
+	if err != nil {
+		response.HandleError(c, err)
+		return
+	}
+
+	response.Success(c, result)
+}

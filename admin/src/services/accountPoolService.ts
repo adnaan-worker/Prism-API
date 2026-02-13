@@ -39,47 +39,36 @@ export const accountPoolService = {
 
   // 凭据管理
   getCredentials: async (params?: { pool_id?: number; provider?: string; status?: string }) => {
-    const { data } = await api.get<AccountCredential[]>('/admin/account-credentials', { params });
+    const { data } = await api.get<AccountCredential[]>('/admin/account-pools/credentials', { params });
     return data;
   },
 
   getCredential: async (id: number) => {
-    const { data } = await api.get<AccountCredential>(`/admin/account-credentials/${id}`);
+    const { data } = await api.get<AccountCredential>(`/admin/account-pools/credentials/${id}`);
     return data;
   },
 
   createCredential: async (credential: Partial<AccountCredential>) => {
-    const { data } = await api.post<AccountCredential>('/admin/account-credentials', credential);
+    const { data } = await api.post<AccountCredential>('/admin/account-pools/credentials', credential);
     return data;
   },
 
   updateCredential: async (id: number, credential: Partial<AccountCredential>) => {
-    const { data } = await api.put<AccountCredential>(`/admin/account-credentials/${id}`, credential);
+    const { data } = await api.put<AccountCredential>(`/admin/account-pools/credentials/${id}`, credential);
     return data;
   },
 
   deleteCredential: async (id: number) => {
-    await api.delete(`/admin/account-credentials/${id}`);
+    await api.delete(`/admin/account-pools/credentials/${id}`);
   },
 
   refreshCredential: async (id: number) => {
-    const { data } = await api.post<AccountCredential>(`/admin/account-credentials/${id}/refresh`);
+    const { data } = await api.post<AccountCredential>(`/admin/account-pools/credentials/${id}/refresh`);
     return data;
   },
 
   updateCredentialStatus: async (id: number, isActive: boolean) => {
-    const { data } = await api.put<AccountCredential>(`/admin/account-credentials/${id}/status`, { is_active: isActive });
-    return data;
-  },
-
-  // OAuth
-  initiateOAuth: async (params: { pool_id: number; provider: string; auth_type?: string }) => {
-    const { data } = await api.post('/admin/oauth/initiate', params);
-    return data;
-  },
-
-  pollDeviceCode: async (params: { pool_id: number; provider: string; device_code: string }) => {
-    const { data } = await api.post('/admin/oauth/poll-device-code', params);
+    const { data } = await api.put<AccountCredential>(`/admin/account-pools/credentials/${id}/status`, { is_active: isActive });
     return data;
   },
 };

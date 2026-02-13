@@ -16,6 +16,15 @@ type Service interface {
 	UpdatePoolStatus(ctx context.Context, id uint, isActive bool) (*PoolResponse, error)
 	GetPoolStats(ctx context.Context, id uint) (*PoolStatsResponse, error)
 	
+	// 凭据相关
+	CreateCredential(ctx context.Context, req *CreateCredentialRequest) (*CredentialResponse, error)
+	UpdateCredential(ctx context.Context, id uint, req *UpdateCredentialRequest) (*CredentialResponse, error)
+	DeleteCredential(ctx context.Context, id uint) error
+	GetCredential(ctx context.Context, id uint) (*CredentialResponse, error)
+	ListCredentials(ctx context.Context, filter *CredentialFilter, opts *query.Options) (*CredentialListResponse, error)
+	UpdateCredentialStatus(ctx context.Context, id uint, isActive bool) (*CredentialResponse, error)
+	RefreshCredential(ctx context.Context, id uint) (*CredentialResponse, error)
+	
 	// 请求日志相关
 	CreateRequestLog(ctx context.Context, log *AccountPoolRequestLog) error
 	ListRequestLogs(ctx context.Context, filter *RequestLogFilter, opts *query.Options) (*RequestLogListResponse, error)
@@ -233,4 +242,163 @@ func (s *service) ListRequestLogs(ctx context.Context, filter *RequestLogFilter,
 	}
 
 	return ToRequestLogListResponse(logs, total), nil
+}
+
+// CreateCredential 创建凭据
+func (s *service) CreateCredential(ctx context.Context, req *CreateCredentialRequest) (*CredentialResponse, error) {
+	// 验证账号池是否存在
+	_, err := s.repo.FindByID(ctx, req.PoolID)
+	if err != nil {
+		return nil, errors.NewNotFoundError("account pool not found")
+	}
+
+	// 验证认证类型
+	if !IsValidAuthType(req.AuthType) {
+		return nil, errors.NewValidationError("invalid auth type", map[string]string{
+			"auth_type": "must be one of: api_key, oauth, session_token",
+		})
+	}
+
+	// 设置默认值
+	if req.Weight == 0 {
+		req.Weight = 1
+	}
+
+	// 创建凭据
+	cred := &AccountCredential{
+		PoolID:       req.PoolID,
+		Provider:     req.Provider,
+		AuthType:     req.AuthType,
+		APIKey:       req.APIKey,
+		AccessToken:  req.AccessToken,
+		RefreshToken: req.RefreshToken,
+		SessionToken: req.SessionToken,
+		AccountName:  req.AccountName,
+		AccountEmail: req.AccountEmail,
+		Weight:       req.Weight,
+		IsActive:     true,
+		HealthStatus: HealthStatusUnknown,
+		RateLimit:    req.RateLimit,
+	}
+
+	if err := s.repo.CreateCredential(ctx, cred); err != nil {
+		return nil, errors.Wrap(err, "failed to create credential")
+	}
+
+	return ToCredentialResponse(cred), nil
+}
+
+// UpdateCredential 更新凭据
+func (s *service) UpdateCredential(ctx context.Context, id uint, req *UpdateCredentialRequest) (*CredentialResponse, error) {
+	// 查找凭据
+	cred, err := s.repo.FindCredentialByID(ctx, id)
+	if err != nil {
+		return nil, errors.NewNotFoundError("credential not found")
+	}
+
+	// 更新字段
+	if req.APIKey != nil {
+		cred.APIKey = *req.APIKey
+	}
+	if req.AccessToken != nil {
+		cred.AccessToken = *req.AccessToken
+	}
+	if req.RefreshToken != nil {
+		cred.RefreshToken = *req.RefreshToken
+	}
+	if req.SessionToken != nil {
+		cred.SessionToken = *req.SessionToken
+	}
+	if req.AccountName != nil {
+		cred.AccountName = *req.AccountName
+	}
+	if req.AccountEmail != nil {
+		cred.AccountEmail = *req.AccountEmail
+	}
+	if req.Weight != nil {
+		cred.Weight = *req.Weight
+	}
+	if req.IsActive != nil {
+		cred.IsActive = *req.IsActive
+	}
+	if req.RateLimit != nil {
+		cred.RateLimit = *req.RateLimit
+	}
+
+	// 保存更新
+	if err := s.repo.UpdateCredential(ctx, cred); err != nil {
+		return nil, errors.Wrap(err, "failed to update credential")
+	}
+
+	return ToCredentialResponse(cred), nil
+}
+
+// DeleteCredential 删除凭据
+func (s *service) DeleteCredential(ctx context.Context, id uint) error {
+	// 检查凭据是否存在
+	_, err := s.repo.FindCredentialByID(ctx, id)
+	if err != nil {
+		return errors.NewNotFoundError("credential not found")
+	}
+
+	// 删除凭据
+	if err := s.repo.DeleteCredential(ctx, id); err != nil {
+		return errors.Wrap(err, "failed to delete credential")
+	}
+
+	return nil
+}
+
+// GetCredential 获取凭据
+func (s *service) GetCredential(ctx context.Context, id uint) (*CredentialResponse, error) {
+	cred, err := s.repo.FindCredentialByID(ctx, id)
+	if err != nil {
+		return nil, errors.NewNotFoundError("credential not found")
+	}
+
+	return ToCredentialResponse(cred), nil
+}
+
+// ListCredentials 查询凭据列表
+func (s *service) ListCredentials(ctx context.Context, filter *CredentialFilter, opts *query.Options) (*CredentialListResponse, error) {
+	creds, total, err := s.repo.ListCredentials(ctx, filter, opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to list credentials")
+	}
+
+	return ToCredentialListResponse(creds, total), nil
+}
+
+// UpdateCredentialStatus 更新凭据状态
+func (s *service) UpdateCredentialStatus(ctx context.Context, id uint, isActive bool) (*CredentialResponse, error) {
+	cred, err := s.repo.FindCredentialByID(ctx, id)
+	if err != nil {
+		return nil, errors.NewNotFoundError("credential not found")
+	}
+
+	if err := s.repo.UpdateCredentialStatus(ctx, id, isActive); err != nil {
+		return nil, errors.Wrap(err, "failed to update credential status")
+	}
+
+	cred.IsActive = isActive
+
+	return ToCredentialResponse(cred), nil
+}
+
+// RefreshCredential 刷新凭据
+func (s *service) RefreshCredential(ctx context.Context, id uint) (*CredentialResponse, error) {
+	cred, err := s.repo.FindCredentialByID(ctx, id)
+	if err != nil {
+		return nil, errors.NewNotFoundError("credential not found")
+	}
+
+	// TODO: 实现实际的刷新逻辑，根据不同的认证类型调用相应的刷新接口
+	// 这里只是更新健康状态和检查时间
+	cred.UpdateHealthStatus(HealthStatusHealthy)
+
+	if err := s.repo.UpdateCredential(ctx, cred); err != nil {
+		return nil, errors.Wrap(err, "failed to refresh credential")
+	}
+
+	return ToCredentialResponse(cred), nil
 }

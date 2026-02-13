@@ -225,3 +225,26 @@ func (h *Handler) DeactivateConfig(c *gin.Context) {
 
 	response.Success(c, gin.H{"message": "config deactivated successfully"})
 }
+
+// GetModelEndpoints 获取模型端点列表
+// @Summary 获取模型端点列表
+// @Tags LoadBalancer
+// @Produce json
+// @Param model path string true "模型名称"
+// @Success 200 {object} ModelEndpointsResponse
+// @Router /api/v1/admin/load-balancer/models/{model}/endpoints [get]
+func (h *Handler) GetModelEndpoints(c *gin.Context) {
+	modelName := c.Param("model")
+	if modelName == "" {
+		response.BadRequest(c, "model name is required")
+		return
+	}
+
+	endpoints, err := h.service.GetModelEndpoints(c.Request.Context(), modelName)
+	if err != nil {
+		response.HandleError(c, err)
+		return
+	}
+
+	response.Success(c, endpoints)
+}

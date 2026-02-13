@@ -171,3 +171,122 @@ func ToRequestLogListResponse(logs []*AccountPoolRequestLog, total int64) *Reque
 		Total: total,
 	}
 }
+
+// CreateCredentialRequest 创建凭据请求
+type CreateCredentialRequest struct {
+	PoolID       uint   `json:"pool_id" binding:"required"`
+	Provider     string `json:"provider" binding:"required"`
+	AuthType     string `json:"auth_type" binding:"required"`
+	APIKey       string `json:"api_key"`
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	SessionToken string `json:"session_token"`
+	AccountName  string `json:"account_name"`
+	AccountEmail string `json:"account_email"`
+	Weight       int    `json:"weight"`
+	RateLimit    int    `json:"rate_limit"`
+}
+
+// UpdateCredentialRequest 更新凭据请求
+type UpdateCredentialRequest struct {
+	APIKey       *string `json:"api_key"`
+	AccessToken  *string `json:"access_token"`
+	RefreshToken *string `json:"refresh_token"`
+	SessionToken *string `json:"session_token"`
+	AccountName  *string `json:"account_name"`
+	AccountEmail *string `json:"account_email"`
+	Weight       *int    `json:"weight"`
+	IsActive     *bool   `json:"is_active"`
+	RateLimit    *int    `json:"rate_limit"`
+}
+
+// UpdateCredentialStatusRequest 更新凭据状态请求
+type UpdateCredentialStatusRequest struct {
+	IsActive bool `json:"is_active" binding:"required"`
+}
+
+// RefreshCredentialRequest 刷新凭据请求
+type RefreshCredentialRequest struct {
+	// 可以添加刷新相关的参数
+}
+
+// CredentialResponse 凭据响应
+type CredentialResponse struct {
+	ID            uint       `json:"id"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+	PoolID        uint       `json:"pool_id"`
+	Provider      string     `json:"provider"`
+	AuthType      string     `json:"auth_type"`
+	AccountName   string     `json:"account_name,omitempty"`
+	AccountEmail  string     `json:"account_email,omitempty"`
+	Weight        int        `json:"weight"`
+	IsActive      bool       `json:"is_active"`
+	HealthStatus  string     `json:"health_status"`
+	LastCheckedAt *time.Time `json:"last_checked_at,omitempty"`
+	LastUsedAt    *time.Time `json:"last_used_at,omitempty"`
+	TotalRequests int64      `json:"total_requests"`
+	TotalErrors   int64      `json:"total_errors"`
+	ErrorRate     float64    `json:"error_rate"`
+	ExpiresAt     *time.Time `json:"expires_at,omitempty"`
+	IsExpired     bool       `json:"is_expired"`
+	RateLimit     int        `json:"rate_limit"`
+	CurrentUsage  int        `json:"current_usage"`
+	// 敏感信息不返回
+}
+
+// CredentialListResponse 凭据列表响应
+type CredentialListResponse struct {
+	Credentials []*CredentialResponse `json:"credentials"`
+	Total       int64                 `json:"total"`
+}
+
+// CredentialFilter 凭据过滤器
+type CredentialFilter struct {
+	PoolID       *uint
+	Provider     *string
+	AuthType     *string
+	IsActive     *bool
+	HealthStatus *string
+}
+
+// ToCredentialResponse 转换为凭据响应
+func ToCredentialResponse(cred *AccountCredential) *CredentialResponse {
+	if cred == nil {
+		return nil
+	}
+	return &CredentialResponse{
+		ID:            cred.ID,
+		CreatedAt:     cred.CreatedAt,
+		UpdatedAt:     cred.UpdatedAt,
+		PoolID:        cred.PoolID,
+		Provider:      cred.Provider,
+		AuthType:      cred.AuthType,
+		AccountName:   cred.AccountName,
+		AccountEmail:  cred.AccountEmail,
+		Weight:        cred.Weight,
+		IsActive:      cred.IsActive,
+		HealthStatus:  cred.HealthStatus,
+		LastCheckedAt: cred.LastCheckedAt,
+		LastUsedAt:    cred.LastUsedAt,
+		TotalRequests: cred.TotalRequests,
+		TotalErrors:   cred.TotalErrors,
+		ErrorRate:     cred.GetErrorRate(),
+		ExpiresAt:     cred.ExpiresAt,
+		IsExpired:     cred.IsExpired(),
+		RateLimit:     cred.RateLimit,
+		CurrentUsage:  cred.CurrentUsage,
+	}
+}
+
+// ToCredentialListResponse 转换为凭据列表响应
+func ToCredentialListResponse(creds []*AccountCredential, total int64) *CredentialListResponse {
+	responses := make([]*CredentialResponse, len(creds))
+	for i, cred := range creds {
+		responses[i] = ToCredentialResponse(cred)
+	}
+	return &CredentialListResponse{
+		Credentials: responses,
+		Total:       total,
+	}
+}

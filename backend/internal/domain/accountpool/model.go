@@ -139,3 +139,165 @@ func IsValidStrategy(strategy string) bool {
 	}
 	return false
 }
+
+// AccountCredential 账号凭据模型
+type AccountCredential struct {
+	ID        uint           `gorm:"primarykey" json:"id"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
+
+	// 关联账号池
+	PoolID uint `gorm:"not null;index" json:"pool_id"`
+
+	// 提供商类型
+	Provider string `gorm:"column:provider_type;not null;size:50" json:"provider"`
+
+	// 认证类型
+	AuthType string `gorm:"not null;size:50;default:'api_key'" json:"auth_type"` // api_key, oauth, session_token
+
+	// 凭据信息（加密存储）
+	APIKey       string `gorm:"type:text" json:"api_key,omitempty"`
+	AccessToken  string `gorm:"type:text" json:"access_token,omitempty"`
+	RefreshToken string `gorm:"type:text" json:"refresh_token,omitempty"`
+	SessionToken string `gorm:"type:text" json:"session_token,omitempty"`
+
+	// OAuth 相关
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+
+	// 账号信息
+	AccountName  string `gorm:"size:255" json:"account_name,omitempty"`
+	AccountEmail string `gorm:"size:255" json:"account_email,omitempty"`
+
+	// 权重（用于加权轮询）
+	Weight int `gorm:"not null;default:1" json:"weight"`
+
+	// 状态
+	IsActive bool `gorm:"column:is_active;not null;default:true" json:"is_active"`
+
+	// 健康状态
+	HealthStatus  string     `gorm:"size:50;default:'unknown'" json:"health_status"` // healthy, unhealthy, unknown
+	LastCheckedAt *time.Time `json:"last_checked_at,omitempty"`
+	LastUsedAt    *time.Time `json:"last_used_at,omitempty"`
+
+	// 统计
+	TotalRequests int64 `gorm:"not null;default:0" json:"total_requests"`
+	TotalErrors   int64 `gorm:"not null;default:0" json:"total_errors"`
+
+	// 速率限制
+	RateLimit         int `gorm:"not null;default:0" json:"rate_limit"`          // 每分钟请求数，0表示无限制
+	CurrentUsage      int `gorm:"not null;default:0" json:"current_usage"`       // 当前分钟使用量
+	RateLimitResetAt  *time.Time `json:"rate_limit_reset_at,omitempty"`
+}
+
+// TableName 指定表名
+func (AccountCredential) TableName() string {
+	return "account_credentials"
+}
+
+// Activate 激活凭据
+func (c *AccountCredential) Activate() {
+	c.IsActive = true
+}
+
+// Deactivate 停用凭据
+func (c *AccountCredential) Deactivate() {
+	c.IsActive = false
+}
+
+// IsExpired 检查是否过期
+func (c *AccountCredential) IsExpired() bool {
+	if c.ExpiresAt == nil {
+		return false
+	}
+	return time.Now().After(*c.ExpiresAt)
+}
+
+// IsHealthy 检查是否健康
+func (c *AccountCredential) IsHealthy() bool {
+	return c.IsActive && c.HealthStatus == "healthy" && !c.IsExpired()
+}
+
+// IncrementRequests 增加请求计数
+func (c *AccountCredential) IncrementRequests() {
+	c.TotalRequests++
+	now := time.Now()
+	c.LastUsedAt = &now
+}
+
+// IncrementErrors 增加错误计数
+func (c *AccountCredential) IncrementErrors() {
+	c.TotalErrors++
+}
+
+// GetErrorRate 获取错误率
+func (c *AccountCredential) GetErrorRate() float64 {
+	if c.TotalRequests == 0 {
+		return 0
+	}
+	return float64(c.TotalErrors) / float64(c.TotalRequests)
+}
+
+// UpdateHealthStatus 更新健康状态
+func (c *AccountCredential) UpdateHealthStatus(status string) {
+	c.HealthStatus = status
+	now := time.Now()
+	c.LastCheckedAt = &now
+}
+
+// IsRateLimited 检查是否达到速率限制
+func (c *AccountCredential) IsRateLimited() bool {
+	if c.RateLimit == 0 {
+		return false
+	}
+	
+	// 检查是否需要重置
+	if c.RateLimitResetAt != nil && time.Now().After(*c.RateLimitResetAt) {
+		return false
+	}
+	
+	return c.CurrentUsage >= c.RateLimit
+}
+
+// IncrementUsage 增加使用量
+func (c *AccountCredential) IncrementUsage() {
+	// 如果需要重置
+	if c.RateLimitResetAt == nil || time.Now().After(*c.RateLimitResetAt) {
+		c.CurrentUsage = 1
+		resetAt := time.Now().Add(time.Minute)
+		c.RateLimitResetAt = &resetAt
+	} else {
+		c.CurrentUsage++
+	}
+}
+
+// 认证类型常量
+const (
+	AuthTypeAPIKey       = "api_key"
+	AuthTypeOAuth        = "oauth"
+	AuthTypeSessionToken = "session_token"
+)
+
+// ValidAuthTypes 有效的认证类型列表
+var ValidAuthTypes = []string{
+	AuthTypeAPIKey,
+	AuthTypeOAuth,
+	AuthTypeSessionToken,
+}
+
+// IsValidAuthType 检查认证类型是否有效
+func IsValidAuthType(authType string) bool {
+	for _, t := range ValidAuthTypes {
+		if t == authType {
+			return true
+		}
+	}
+	return false
+}
+
+// 健康状态常量
+const (
+	HealthStatusHealthy   = "healthy"
+	HealthStatusUnhealthy = "unhealthy"
+	HealthStatusUnknown   = "unknown"
+)

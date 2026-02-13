@@ -266,3 +266,208 @@ func (h *Handler) ListRequestLogs(c *gin.Context) {
 
 	response.Success(c, logs)
 }
+
+// CreateCredential 创建凭据
+// @Summary 创建凭据
+// @Tags AccountPool
+// @Accept json
+// @Produce json
+// @Param request body CreateCredentialRequest true "创建请求"
+// @Success 201 {object} CredentialResponse
+// @Router /api/v1/account-pools/credentials [post]
+func (h *Handler) CreateCredential(c *gin.Context) {
+	var req CreateCredentialRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.ValidationError(c, err)
+		return
+	}
+
+	cred, err := h.service.CreateCredential(c.Request.Context(), &req)
+	if err != nil {
+		response.HandleError(c, err)
+		return
+	}
+
+	response.Created(c, cred)
+}
+
+// UpdateCredential 更新凭据
+// @Summary 更新凭据
+// @Tags AccountPool
+// @Accept json
+// @Produce json
+// @Param id path int true "凭据ID"
+// @Param request body UpdateCredentialRequest true "更新请求"
+// @Success 200 {object} CredentialResponse
+// @Router /api/v1/account-pools/credentials/{id} [put]
+func (h *Handler) UpdateCredential(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		response.BadRequest(c, "invalid credential id")
+		return
+	}
+
+	var req UpdateCredentialRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.ValidationError(c, err)
+		return
+	}
+
+	cred, err := h.service.UpdateCredential(c.Request.Context(), uint(id), &req)
+	if err != nil {
+		response.HandleError(c, err)
+		return
+	}
+
+	response.Success(c, cred)
+}
+
+// DeleteCredential 删除凭据
+// @Summary 删除凭据
+// @Tags AccountPool
+// @Produce json
+// @Param id path int true "凭据ID"
+// @Success 200 {object} response.Response
+// @Router /api/v1/account-pools/credentials/{id} [delete]
+func (h *Handler) DeleteCredential(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		response.BadRequest(c, "invalid credential id")
+		return
+	}
+
+	if err := h.service.DeleteCredential(c.Request.Context(), uint(id)); err != nil {
+		response.HandleError(c, err)
+		return
+	}
+
+	response.Success(c, gin.H{"message": "credential deleted successfully"})
+}
+
+// GetCredential 获取凭据
+// @Summary 获取凭据
+// @Tags AccountPool
+// @Produce json
+// @Param id path int true "凭据ID"
+// @Success 200 {object} CredentialResponse
+// @Router /api/v1/account-pools/credentials/{id} [get]
+func (h *Handler) GetCredential(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		response.BadRequest(c, "invalid credential id")
+		return
+	}
+
+	cred, err := h.service.GetCredential(c.Request.Context(), uint(id))
+	if err != nil {
+		response.HandleError(c, err)
+		return
+	}
+
+	response.Success(c, cred)
+}
+
+// ListCredentials 查询凭据列表
+// @Summary 查询凭据列表
+// @Tags AccountPool
+// @Produce json
+// @Param pool_id query int false "账号池ID"
+// @Param provider query string false "提供商"
+// @Param auth_type query string false "认证类型"
+// @Param is_active query bool false "是否激活"
+// @Param health_status query string false "健康状态"
+// @Param page query int false "页码"
+// @Param page_size query int false "每页数量"
+// @Param sort_by query string false "排序字段"
+// @Param sort_order query string false "排序方向"
+// @Success 200 {object} CredentialListResponse
+// @Router /api/v1/account-pools/credentials [get]
+func (h *Handler) ListCredentials(c *gin.Context) {
+	// 构建过滤器
+	filter := &CredentialFilter{}
+	if poolIDStr := c.Query("pool_id"); poolIDStr != "" {
+		if poolID, err := strconv.ParseUint(poolIDStr, 10, 32); err == nil {
+			id := uint(poolID)
+			filter.PoolID = &id
+		}
+	}
+	if provider := c.Query("provider"); provider != "" {
+		filter.Provider = &provider
+	}
+	if authType := c.Query("auth_type"); authType != "" {
+		filter.AuthType = &authType
+	}
+	if isActiveStr := c.Query("is_active"); isActiveStr != "" {
+		isActive := isActiveStr == "true"
+		filter.IsActive = &isActive
+	}
+	if healthStatus := c.Query("health_status"); healthStatus != "" {
+		filter.HealthStatus = &healthStatus
+	}
+
+	// 构建查询选项
+	opts := query.NewOptionsFromQuery(c)
+
+	creds, err := h.service.ListCredentials(c.Request.Context(), filter, opts)
+	if err != nil {
+		response.HandleError(c, err)
+		return
+	}
+
+	response.Success(c, creds)
+}
+
+// UpdateCredentialStatus 更新凭据状态
+// @Summary 更新凭据状态
+// @Tags AccountPool
+// @Accept json
+// @Produce json
+// @Param id path int true "凭据ID"
+// @Param request body UpdateCredentialStatusRequest true "状态更新请求"
+// @Success 200 {object} CredentialResponse
+// @Router /api/v1/account-pools/credentials/{id}/status [put]
+func (h *Handler) UpdateCredentialStatus(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		response.BadRequest(c, "invalid credential id")
+		return
+	}
+
+	var req UpdateCredentialStatusRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.ValidationError(c, err)
+		return
+	}
+
+	cred, err := h.service.UpdateCredentialStatus(c.Request.Context(), uint(id), req.IsActive)
+	if err != nil {
+		response.HandleError(c, err)
+		return
+	}
+
+	response.Success(c, cred)
+}
+
+// RefreshCredential 刷新凭据
+// @Summary 刷新凭据
+// @Tags AccountPool
+// @Accept json
+// @Produce json
+// @Param id path int true "凭据ID"
+// @Success 200 {object} CredentialResponse
+// @Router /api/v1/account-pools/credentials/{id}/refresh [post]
+func (h *Handler) RefreshCredential(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		response.BadRequest(c, "invalid credential id")
+		return
+	}
+
+	cred, err := h.service.RefreshCredential(c.Request.Context(), uint(id))
+	if err != nil {
+		response.HandleError(c, err)
+		return
+	}
+
+	response.Success(c, cred)
+}

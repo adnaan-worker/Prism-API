@@ -25,7 +25,13 @@ apiClient.interceptors.request.use(
 
 // Response interceptor for error handling
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // 统一处理响应体，提取 data 字段
+    if (response.data && typeof response.data === 'object' && 'data' in response.data) {
+      response.data = response.data.data;
+    }
+    return response;
+  },
   (error) => {
     if (error.response?.status === 401) {
       // Clear token and redirect to login

@@ -10,6 +10,7 @@ import (
 	"api-aggregator/backend/internal/domain/log"
 	"api-aggregator/backend/internal/domain/pricing"
 	"api-aggregator/backend/internal/domain/quota"
+	"api-aggregator/backend/internal/domain/settings"
 	"api-aggregator/backend/internal/domain/stats"
 	"api-aggregator/backend/internal/domain/user"
 	"api-aggregator/backend/internal/middleware"
@@ -34,6 +35,7 @@ type Router struct {
 	cacheHandler         *cache.Handler
 	loadBalancerHandler  *loadbalancer.Handler
 	accountPoolHandler   *accountpool.Handler
+	settingsHandler      *settings.Handler
 }
 
 // Config 路由配置
@@ -53,6 +55,7 @@ type Config struct {
 	CacheHandler         *cache.Handler
 	LoadBalancerHandler  *loadbalancer.Handler
 	AccountPoolHandler   *accountpool.Handler
+	SettingsHandler      *settings.Handler
 }
 
 // New 创建路由管理器实例
@@ -71,6 +74,7 @@ func New(config *Config) *Router {
 		cacheHandler:         config.CacheHandler,
 		loadBalancerHandler:  config.LoadBalancerHandler,
 		accountPoolHandler:   config.AccountPoolHandler,
+		settingsHandler:      config.SettingsHandler,
 	}
 }
 
@@ -169,6 +173,9 @@ func (r *Router) setupAdminRoutes() {
 		
 		// 账号池管理
 		r.setupAdminAccountPoolRoutes(admin)
+		
+		// 系统设置
+		r.setupAdminSettingsRoutes(admin)
 	}
 }
 
@@ -200,6 +207,12 @@ func (r *Router) setupAdminAPIConfigRoutes(group *gin.RouterGroup) {
 		configs.POST("/batch/delete", r.apiConfigHandler.BatchDeleteConfigs)
 		configs.POST("/batch/activate", r.apiConfigHandler.BatchActivateConfigs)
 		configs.POST("/batch/deactivate", r.apiConfigHandler.BatchDeactivateConfigs)
+	}
+	
+	// 提供商相关
+	providers := group.Group("/providers")
+	{
+		providers.POST("/fetch-models", r.apiConfigHandler.FetchModels)
 	}
 }
 
@@ -264,6 +277,7 @@ func (r *Router) setupAdminLoadBalancerRoutes(group *gin.RouterGroup) {
 		lb.POST("/configs/:id/activate", r.loadBalancerHandler.ActivateConfig)
 		lb.POST("/configs/:id/deactivate", r.loadBalancerHandler.DeactivateConfig)
 		lb.GET("/models/:model/config", r.loadBalancerHandler.GetConfigByModel)
+		lb.GET("/models/:model/endpoints", r.loadBalancerHandler.GetModelEndpoints)
 	}
 }
 
@@ -279,7 +293,41 @@ func (r *Router) setupAdminAccountPoolRoutes(group *gin.RouterGroup) {
 		pools.PUT("/:id/status", r.accountPoolHandler.UpdatePoolStatus)
 		pools.GET("/:id/stats", r.accountPoolHandler.GetPoolStats)
 		
+		// 凭据管理
+		pools.GET("/credentials", r.accountPoolHandler.ListCredentials)
+		pools.POST("/credentials", r.accountPoolHandler.CreateCredential)
+		pools.GET("/credentials/:id", r.accountPoolHandler.GetCredential)
+		pools.PUT("/credentials/:id", r.accountPoolHandler.UpdateCredential)
+		pools.DELETE("/credentials/:id", r.accountPoolHandler.DeleteCredential)
+		pools.PUT("/credentials/:id/status", r.accountPoolHandler.UpdateCredentialStatus)
+		pools.POST("/credentials/:id/refresh", r.accountPoolHandler.RefreshCredential)
+		
 		// 请求日志
 		pools.GET("/request-logs", r.accountPoolHandler.ListRequestLogs)
 	}
 }
+
+// setupAdminSettingsRoutes 设置管理员设置路由
+func (r *Router) setupAdminSettingsRoutes(group *gin.RouterGroup) {
+	settings := group.Group("/settings")
+	{
+		// 运行时配置
+		settings.GET("/runtime", r.settingsHandler.GetRuntimeConfig)
+		settings.PUT("/runtime", r.settingsHandler.UpdateRuntimeConfig)
+		
+		// 系统配置
+		settings.GET("/system", r.settingsHandler.GetSystemConfig)
+		
+		// 密码管理
+		settings.PUT("/password", r.settingsHandler.UpdatePassword)
+		
+		// 默认配额
+		settings.GET("/default-quota", r.settingsHandler.GetDefaultQuota)
+		settings.PUT("/default-quota", r.settingsHandler.UpdateDefaultQuota)
+		
+		// 默认速率限制
+		settings.GET("/default-rate-limit", r.settingsHandler.GetDefaultRateLimit)
+		settings.PUT("/default-rate-limit", r.settingsHandler.UpdateDefaultRateLimit)
+	}
+}
+
