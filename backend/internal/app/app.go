@@ -22,6 +22,7 @@ import (
 	"api-aggregator/backend/pkg/embedding"
 	"api-aggregator/backend/pkg/logger"
 	"api-aggregator/backend/pkg/runtime"
+	"context"
 	"database/sql"
 	"time"
 
@@ -199,10 +200,17 @@ func (app *App) initRouter() error {
 
 	// 初始化账号池管理器
 	poolManager := accountpool.NewPoolManager(accountPoolRepo, modelMapper)
-	poolManager.SetAdapterFactory(adapterFactory)
 	
-	// 将账号池管理器注入到 Adapter Factory
-	adapterFactory.SetPoolManager(poolManager)
+	// 初始化 Token 刷新调度器
+	refreshScheduler := accountpool.NewRefreshScheduler(
+		accountPoolRepo,
+		accountpool.NewKiroRefreshService(),
+		5*time.Minute, // 每5分钟检查一次
+		*app.Logger,
+	)
+	
+	// 启动刷新调度器
+	go refreshScheduler.Start(context.Background())
 
 	// 初始化 Embedding 客户端（如果启用）
 	var embeddingClient *embedding.Client
@@ -217,6 +225,7 @@ func (app *App) initRouter() error {
 	proxyService := proxy.NewService(
 		adapterFactory,
 		apiConfigRepo,
+		poolManager,
 		loadBalancerService,
 		cacheService,
 		quotaService,

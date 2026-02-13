@@ -11,6 +11,8 @@ export interface APIConfigsListResponse {
 export interface CreateAPIConfigRequest {
   name: string;
   type: string;
+  config_type?: string;
+  account_pool_id?: number;
   base_url: string;
   api_key?: string;
   models: string[];

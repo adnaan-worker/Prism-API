@@ -14,7 +14,6 @@ import (
 // 负责从账号池中选择凭据并创建适配器
 type PoolManager struct {
 	repo           Repository
-	adapterFactory *adapter.Factory
 	modelMapper    adapter.KiroModelMapper
 	refreshService *KiroRefreshService
 	mu             sync.RWMutex
@@ -29,11 +28,6 @@ func NewPoolManager(repo Repository, modelMapper adapter.KiroModelMapper) *PoolM
 		refreshService: NewKiroRefreshService(),
 		roundRobinIdx:  make(map[uint]int),
 	}
-}
-
-// SetAdapterFactory 设置适配器工厂（避免循环依赖）
-func (pm *PoolManager) SetAdapterFactory(factory *adapter.Factory) {
-	pm.adapterFactory = factory
 }
 
 // GetAdapter 从账号池获取适配器
@@ -175,10 +169,6 @@ func (pm *PoolManager) selectRandom(creds []*AccountCredential) *AccountCredenti
 
 // createAdapterFromCredential 从凭据创建适配器
 func (pm *PoolManager) createAdapterFromCredential(cred *AccountCredential) (adapter.Adapter, error) {
-	if pm.adapterFactory == nil {
-		return nil, errors.New(500001, "adapter factory not set")
-	}
-
 	// 根据提供商类型创建适配器
 	switch cred.Provider {
 	case "kiro":
@@ -206,6 +196,17 @@ func (pm *PoolManager) createKiroAdapter(cred *AccountCredential) (adapter.Adapt
 		Timeout: 120,
 	}
 
+	// 从 Metadata 中获取 machine_id
+	machineID, _ := cred.Metadata["machine_id"].(string)
+	if machineID == "" {
+		// 如果没有，生成一个新的
+		machineID = generateMachineID()
+		if cred.Metadata == nil {
+			cred.Metadata = make(JSONMap)
+		}
+		cred.Metadata["machine_id"] = machineID
+	}
+
 	// 创建 Kiro 适配器
 	// profileArn 对于 Social Auth (OAuth) 不需要，传空字符串
 	kiroAdapter := adapter.NewKiroAdapter(
@@ -217,6 +218,12 @@ func (pm *PoolManager) createKiroAdapter(cred *AccountCredential) (adapter.Adapt
 	)
 
 	return kiroAdapter, nil
+}
+
+// generateMachineID 生成机器 ID
+func generateMachineID() string {
+	// 简单的随机 ID 生成
+	return fmt.Sprintf("machine-%d", time.Now().UnixNano())
 }
 
 // createOpenAIAdapter 创建 OpenAI 适配器

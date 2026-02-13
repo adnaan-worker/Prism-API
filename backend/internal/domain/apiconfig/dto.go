@@ -4,33 +4,37 @@ import "time"
 
 // CreateConfigRequest 创建配置请求
 type CreateConfigRequest struct {
-	Name     string                 `json:"name" binding:"required,min=1,max=255"`
-	Type     string                 `json:"type" binding:"required,oneof=openai anthropic gemini kiro custom"`
-	BaseURL  string                 `json:"base_url"` // 移除验证，在 Service 层处理
-	APIKey   string                 `json:"api_key" binding:"omitempty"`
-	Models   []string               `json:"models" binding:"required,min=1"`
-	Headers  map[string]interface{} `json:"headers" binding:"omitempty"`
-	Metadata map[string]interface{} `json:"metadata" binding:"omitempty"`
-	Priority int                    `json:"priority" binding:"omitempty,min=1,max=1000"`
-	Weight   int                    `json:"weight" binding:"omitempty,min=1,max=100"`
-	MaxRPS   int                    `json:"max_rps" binding:"omitempty,min=0"`
-	Timeout  int                    `json:"timeout" binding:"omitempty,min=1,max=300"`
+	Name          string                 `json:"name" binding:"required,min=1,max=255"`
+	Type          string                 `json:"type" binding:"required,oneof=openai anthropic gemini kiro custom"`
+	ConfigType    string                 `json:"config_type" binding:"omitempty,oneof=direct account_pool"`
+	AccountPoolID *uint                  `json:"account_pool_id" binding:"omitempty"`
+	BaseURL       string                 `json:"base_url"` // 移除验证，在 Service 层处理
+	APIKey        string                 `json:"api_key" binding:"omitempty"`
+	Models        []string               `json:"models" binding:"required,min=1"`
+	Headers       map[string]interface{} `json:"headers" binding:"omitempty"`
+	Metadata      map[string]interface{} `json:"metadata" binding:"omitempty"`
+	Priority      int                    `json:"priority" binding:"omitempty,min=1,max=1000"`
+	Weight        int                    `json:"weight" binding:"omitempty,min=1,max=100"`
+	MaxRPS        int                    `json:"max_rps" binding:"omitempty,min=0"`
+	Timeout       int                    `json:"timeout" binding:"omitempty,min=1,max=300"`
 }
 
 // UpdateConfigRequest 更新配置请求
 type UpdateConfigRequest struct {
-	Name     string                 `json:"name" binding:"omitempty,min=1,max=255"`
-	Type     string                 `json:"type" binding:"omitempty,oneof=openai anthropic gemini kiro custom"`
-	BaseURL  string                 `json:"base_url" binding:"omitempty,url"`
-	APIKey   string                 `json:"api_key" binding:"omitempty"`
-	Models   []string               `json:"models" binding:"omitempty,min=1"`
-	Headers  map[string]interface{} `json:"headers" binding:"omitempty"`
-	Metadata map[string]interface{} `json:"metadata" binding:"omitempty"`
-	Priority *int                   `json:"priority" binding:"omitempty,min=1,max=1000"`
-	Weight   *int                   `json:"weight" binding:"omitempty,min=1,max=100"`
-	MaxRPS   *int                   `json:"max_rps" binding:"omitempty,min=0"`
-	Timeout  *int                   `json:"timeout" binding:"omitempty,min=1,max=300"`
-	IsActive *bool                  `json:"is_active" binding:"omitempty"`
+	Name          string                 `json:"name" binding:"omitempty,min=1,max=255"`
+	Type          string                 `json:"type" binding:"omitempty,oneof=openai anthropic gemini kiro custom"`
+	ConfigType    *string                `json:"config_type" binding:"omitempty,oneof=direct account_pool"`
+	AccountPoolID *uint                  `json:"account_pool_id" binding:"omitempty"`
+	BaseURL       string                 `json:"base_url" binding:"omitempty,url"`
+	APIKey        string                 `json:"api_key" binding:"omitempty"`
+	Models        []string               `json:"models" binding:"omitempty,min=1"`
+	Headers       map[string]interface{} `json:"headers" binding:"omitempty"`
+	Metadata      map[string]interface{} `json:"metadata" binding:"omitempty"`
+	Priority      *int                   `json:"priority" binding:"omitempty,min=1,max=1000"`
+	Weight        *int                   `json:"weight" binding:"omitempty,min=1,max=100"`
+	MaxRPS        *int                   `json:"max_rps" binding:"omitempty,min=0"`
+	Timeout       *int                   `json:"timeout" binding:"omitempty,min=1,max=300"`
+	IsActive      *bool                  `json:"is_active" binding:"omitempty"`
 }
 
 // GetConfigsRequest 获取配置列表请求
@@ -49,21 +53,23 @@ type BatchOperationRequest struct {
 
 // ConfigResponse 配置响应
 type ConfigResponse struct {
-	ID        uint                   `json:"id"`
-	Name      string                 `json:"name"`
-	Type      string                 `json:"type"`
-	BaseURL   string                 `json:"base_url"`
-	APIKey    string                 `json:"api_key,omitempty"`
-	Models    []string               `json:"models"`
-	Headers   map[string]interface{} `json:"headers,omitempty"`
-	Metadata  map[string]interface{} `json:"metadata,omitempty"`
-	IsActive  bool                   `json:"is_active"`
-	Priority  int                    `json:"priority"`
-	Weight    int                    `json:"weight"`
-	MaxRPS    int                    `json:"max_rps"`
-	Timeout   int                    `json:"timeout"`
-	CreatedAt time.Time              `json:"created_at"`
-	UpdatedAt time.Time              `json:"updated_at"`
+	ID            uint                   `json:"id"`
+	Name          string                 `json:"name"`
+	Type          string                 `json:"type"`
+	ConfigType    string                 `json:"config_type"`
+	AccountPoolID *uint                  `json:"account_pool_id,omitempty"`
+	BaseURL       string                 `json:"base_url"`
+	APIKey        string                 `json:"api_key,omitempty"`
+	Models        []string               `json:"models"`
+	Headers       map[string]interface{} `json:"headers,omitempty"`
+	Metadata      map[string]interface{} `json:"metadata,omitempty"`
+	IsActive      bool                   `json:"is_active"`
+	Priority      int                    `json:"priority"`
+	Weight        int                    `json:"weight"`
+	MaxRPS        int                    `json:"max_rps"`
+	Timeout       int                    `json:"timeout"`
+	CreatedAt     time.Time              `json:"created_at"`
+	UpdatedAt     time.Time              `json:"updated_at"`
 }
 
 // ConfigListResponse 配置列表响应
@@ -83,21 +89,23 @@ type BatchOperationResponse struct {
 // ToResponse 转换为响应对象
 func (c *APIConfig) ToResponse() *ConfigResponse {
 	return &ConfigResponse{
-		ID:        c.ID,
-		Name:      c.Name,
-		Type:      c.Type,
-		BaseURL:   c.BaseURL,
-		APIKey:    c.APIKey,
-		Models:    c.Models,
-		Headers:   c.Headers,
-		Metadata:  c.Metadata,
-		IsActive:  c.IsActive,
-		Priority:  c.Priority,
-		Weight:    c.Weight,
-		MaxRPS:    c.MaxRPS,
-		Timeout:   c.Timeout,
-		CreatedAt: c.CreatedAt,
-		UpdatedAt: c.UpdatedAt,
+		ID:            c.ID,
+		Name:          c.Name,
+		Type:          c.Type,
+		ConfigType:    c.ConfigType,
+		AccountPoolID: c.AccountPoolID,
+		BaseURL:       c.BaseURL,
+		APIKey:        c.APIKey,
+		Models:        c.Models,
+		Headers:       c.Headers,
+		Metadata:      c.Metadata,
+		IsActive:      c.IsActive,
+		Priority:      c.Priority,
+		Weight:        c.Weight,
+		MaxRPS:        c.MaxRPS,
+		Timeout:       c.Timeout,
+		CreatedAt:     c.CreatedAt,
+		UpdatedAt:     c.UpdatedAt,
 	}
 }
 

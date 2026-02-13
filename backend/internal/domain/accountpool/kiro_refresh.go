@@ -35,22 +35,13 @@ func (s *KiroRefreshService) RefreshKiroToken(ctx context.Context, cred *Account
 		return fmt.Errorf("refresh token is empty")
 	}
 
-	// 从 SessionToken 中提取 clientId 和 clientSecret
-	// SessionToken 存储格式: {"clientId":"xxx","clientSecret":"yyy"}
-	var tokenData struct {
-		ClientID     string `json:"clientId"`
-		ClientSecret string `json:"clientSecret"`
-	}
-
-	if cred.SessionToken != "" {
-		if err := json.Unmarshal([]byte(cred.SessionToken), &tokenData); err != nil {
-			return fmt.Errorf("failed to parse session token: %w", err)
-		}
-	}
+	// 从 Metadata 中提取 clientId 和 clientSecret
+	clientID, _ := cred.Metadata["client_id"].(string)
+	clientSecret, _ := cred.Metadata["client_secret"].(string)
 
 	// 如果没有 clientId/clientSecret，返回错误
-	if tokenData.ClientID == "" || tokenData.ClientSecret == "" {
-		return fmt.Errorf("missing clientId or clientSecret in session token")
+	if clientID == "" || clientSecret == "" {
+		return fmt.Errorf("missing client_id or client_secret in metadata")
 	}
 
 	// AWS OIDC 刷新端点
@@ -59,8 +50,8 @@ func (s *KiroRefreshService) RefreshKiroToken(ctx context.Context, cred *Account
 
 	// 构建刷新请求（完全按照 Kiro Account Manager 的格式）
 	reqBody := map[string]string{
-		"clientId":     tokenData.ClientID,
-		"clientSecret": tokenData.ClientSecret,
+		"clientId":     clientID,
+		"clientSecret": clientSecret,
 		"refreshToken": cred.RefreshToken,
 		"grantType":    "refresh_token",
 	}
@@ -121,7 +112,6 @@ func (s *KiroRefreshService) RefreshKiroToken(ctx context.Context, cred *Account
 	}
 
 	// 更新状态
-	cred.Status = "active"
 	cred.HealthStatus = HealthStatusHealthy
 	cred.LastError = ""
 

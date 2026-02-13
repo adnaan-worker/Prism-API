@@ -271,10 +271,39 @@ const ApiConfigsPage: React.FC = () => {
       onFilter: (value, record) => record.type === value,
     },
     {
+      title: '配置类型',
+      dataIndex: 'config_type',
+      key: 'config_type',
+      width: 120,
+      render: (configType: string, record) => {
+        if (configType === 'account_pool') {
+          return (
+            <Tooltip title={`账号池 ID: ${record.account_pool_id}`}>
+              <Tag color="purple" icon={<DatabaseOutlined />}>
+                账号池
+              </Tag>
+            </Tooltip>
+          );
+        }
+        return <Tag color="blue">直接调用</Tag>;
+      },
+      filters: [
+        { text: '直接调用', value: 'direct' },
+        { text: '账号池', value: 'account_pool' },
+      ],
+      onFilter: (value, record) => record.config_type === value,
+    },
+    {
       title: 'Base URL',
       dataIndex: 'base_url',
       key: 'base_url',
       ellipsis: true,
+      render: (url: string, record) => {
+        if (record.config_type === 'account_pool') {
+          return <Tag color="purple">使用账号池</Tag>;
+        }
+        return url;
+      },
     },
     {
       title: '支持模型',
@@ -331,19 +360,18 @@ const ApiConfigsPage: React.FC = () => {
       width: 200,
       render: (_, record) => {
         // 检查是否是账号池类型
-        const isAccountPool = record.base_url && record.base_url.startsWith('account_pool:');
-        const poolId = isAccountPool ? parseInt(record.base_url.split(':')[2]) : null;
+        const isAccountPool = record.config_type === 'account_pool' && record.account_pool_id;
         
         return (
           <Space>
-            {isAccountPool && poolId && (
+            {isAccountPool && (
               <Tooltip title="管理账号池">
                 <Button
                   type="link"
                   size="small"
                   icon={<DatabaseOutlined />}
                   onClick={() => {
-                    setManagingPoolId(poolId);
+                    setManagingPoolId(record.account_pool_id!);
                     setManagingConfig(record);
                     setPoolManageVisible(true);
                   }}
@@ -394,14 +422,11 @@ const ApiConfigsPage: React.FC = () => {
     configModal.showModal(config);
     setSelectedType(config.type);
     
-    // 如果是 Kiro 类型且使用账号池，解析 pool_id
-    let poolId: number | null = null;
-    if (config.type === 'kiro' && config.base_url.startsWith('account_pool:')) {
-      const parts = config.base_url.split(':');
-      if (parts.length === 3) {
-        poolId = parseInt(parts[2]);
-        setCurrentPoolId(poolId);
-      }
+    // 如果使用账号池，设置 pool_id
+    if (config.config_type === 'account_pool' && config.account_pool_id) {
+      setCurrentPoolId(config.account_pool_id);
+    } else {
+      setCurrentPoolId(null);
     }
     
     configModal.form.setFieldsValue({
@@ -512,11 +537,15 @@ const ApiConfigsPage: React.FC = () => {
           ? values.models.split('\n').filter((m: string) => m.trim())
           : values.models;
 
+      let configType = 'direct';
+      let accountPoolId = null;
       let baseUrl = values.base_url;
-      let poolId = currentPoolId;
       
-      // 如果是 Kiro 类型，需要确保有账号池
+      // 如果是 Kiro 类型，使用账号池
       if (values.type === 'kiro') {
+        configType = 'account_pool';
+        let poolId = currentPoolId;
+        
         if (!poolId) {
           // 创建新的账号池
           const pool = await createPoolMutation.mutateAsync({
@@ -524,14 +553,22 @@ const ApiConfigsPage: React.FC = () => {
             provider: 'kiro',
             description: `Auto-created pool for ${values.name}`,
             is_active: true,
+            strategy: 'weighted_round_robin',
+            health_check_interval: 300,
+            health_check_timeout: 30,
+            max_retries: 3,
           });
           poolId = pool.id;
         }
-        baseUrl = `account_pool:kiro:${poolId}`;
+        
+        accountPoolId = poolId;
+        baseUrl = ''; // 账号池类型不需要 base_url
       }
 
       const data = {
         ...values,
+        config_type: configType,
+        account_pool_id: accountPoolId,
         base_url: baseUrl,
         models: modelsArray,
       };

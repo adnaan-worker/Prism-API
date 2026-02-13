@@ -278,6 +278,73 @@ func ToCredentialResponse(cred *AccountCredential) *CredentialResponse {
 	if cred == nil {
 		return nil
 	}
+
+	// 从 Metadata 中提取信息
+	accountName, _ := cred.Metadata["account_name"].(string)
+	accountEmail, _ := cred.Metadata["account_email"].(string)
+	machineID, _ := cred.Metadata["machine_id"].(string)
+
+	// 提取订阅信息
+	var subscriptionType, subscriptionTitle string
+	var subscriptionExpiresAt *time.Time
+	var subscriptionDaysRemaining *int
+	if sub, ok := cred.Metadata["subscription"].(map[string]interface{}); ok {
+		subscriptionType, _ = sub["type"].(string)
+		subscriptionTitle, _ = sub["title"].(string)
+		if expiresStr, ok := sub["expires_at"].(string); ok && expiresStr != "" {
+			if t, err := time.Parse(time.RFC3339, expiresStr); err == nil {
+				subscriptionExpiresAt = &t
+			}
+		}
+		if days, ok := sub["days_remaining"].(float64); ok {
+			d := int(days)
+			subscriptionDaysRemaining = &d
+		}
+	}
+
+	// 提取使用量信息
+	var usageCurrent, usageLimit, baseLimit, baseCurrent, freeTrialLimit, freeTrialCurrent int
+	var usagePercent float64
+	var usageLastUpdated, freeTrialExpiry, nextResetDate *time.Time
+	if usage, ok := cred.Metadata["usage"].(map[string]interface{}); ok {
+		if current, ok := usage["current"].(float64); ok {
+			usageCurrent = int(current)
+		}
+		if limit, ok := usage["limit"].(float64); ok {
+			usageLimit = int(limit)
+		}
+		if percent, ok := usage["percent"].(float64); ok {
+			usagePercent = percent
+		}
+		if lastUpdatedStr, ok := usage["last_updated"].(string); ok && lastUpdatedStr != "" {
+			if t, err := time.Parse(time.RFC3339, lastUpdatedStr); err == nil {
+				usageLastUpdated = &t
+			}
+		}
+		if bl, ok := usage["base_limit"].(float64); ok {
+			baseLimit = int(bl)
+		}
+		if bc, ok := usage["base_current"].(float64); ok {
+			baseCurrent = int(bc)
+		}
+		if ftl, ok := usage["free_trial_limit"].(float64); ok {
+			freeTrialLimit = int(ftl)
+		}
+		if ftc, ok := usage["free_trial_current"].(float64); ok {
+			freeTrialCurrent = int(ftc)
+		}
+		if fteStr, ok := usage["free_trial_expiry"].(string); ok && fteStr != "" {
+			if t, err := time.Parse(time.RFC3339, fteStr); err == nil {
+				freeTrialExpiry = &t
+			}
+		}
+		if nrdStr, ok := usage["next_reset_date"].(string); ok && nrdStr != "" {
+			if t, err := time.Parse(time.RFC3339, nrdStr); err == nil {
+				nextResetDate = &t
+			}
+		}
+	}
+
 	return &CredentialResponse{
 		ID:            cred.ID,
 		CreatedAt:     cred.CreatedAt,
@@ -285,14 +352,14 @@ func ToCredentialResponse(cred *AccountCredential) *CredentialResponse {
 		PoolID:        cred.PoolID,
 		Provider:      cred.Provider,
 		AuthType:      cred.AuthType,
-		AccountName:   cred.AccountName,
-		AccountEmail:  cred.AccountEmail,
+		AccountName:   accountName,
+		AccountEmail:  accountEmail,
 		Weight:        cred.Weight,
 		IsActive:      cred.IsActive,
-		Status:        cred.Status,
+		Status:        "active", // 简化状态
 		LastError:     cred.LastError,
 		HealthStatus:  cred.HealthStatus,
-		LastCheckedAt: cred.LastCheckedAt,
+		LastCheckedAt: nil, // 不再单独记录
 		LastUsedAt:    cred.LastUsedAt,
 		TotalRequests: cred.TotalRequests,
 		TotalErrors:   cred.TotalErrors,
@@ -301,29 +368,30 @@ func ToCredentialResponse(cred *AccountCredential) *CredentialResponse {
 		IsExpired:     cred.IsExpired(),
 		RateLimit:     cred.RateLimit,
 		CurrentUsage:  cred.CurrentUsage,
-		
+
 		// 订阅信息
-		SubscriptionType:          cred.SubscriptionType,
-		SubscriptionTitle:         cred.SubscriptionTitle,
-		SubscriptionExpiresAt:     cred.SubscriptionExpiresAt,
-		SubscriptionDaysRemaining: cred.SubscriptionDaysRemaining,
-		
+		SubscriptionType:          subscriptionType,
+		SubscriptionTitle:         subscriptionTitle,
+		SubscriptionExpiresAt:     subscriptionExpiresAt,
+		SubscriptionDaysRemaining: subscriptionDaysRemaining,
+
 		// 使用量详情
-		UsageCurrent:        cred.UsageCurrent,
-		UsageLimit:          cred.UsageLimit,
-		UsagePercent:        cred.UsagePercent,
-		UsageLastUpdated:    cred.UsageLastUpdated,
-		BaseLimit:           cred.BaseLimit,
-		BaseCurrent:         cred.BaseCurrent,
-		FreeTrialLimit:      cred.FreeTrialLimit,
-		FreeTrialCurrent:    cred.FreeTrialCurrent,
-		FreeTrialExpiry:     cred.FreeTrialExpiry,
-		NextResetDate:       cred.NextResetDate,
-		
+		UsageCurrent:        usageCurrent,
+		UsageLimit:          usageLimit,
+		UsagePercent:        usagePercent,
+		UsageLastUpdated:    usageLastUpdated,
+		BaseLimit:           baseLimit,
+		BaseCurrent:         baseCurrent,
+		FreeTrialLimit:      freeTrialLimit,
+		FreeTrialCurrent:    freeTrialCurrent,
+		FreeTrialExpiry:     freeTrialExpiry,
+		NextResetDate:       nextResetDate,
+
 		// 机器码
-		MachineID: cred.MachineID,
+		MachineID: machineID,
 	}
 }
+
 
 // ToCredentialListResponse 转换为凭据列表响应
 func ToCredentialListResponse(creds []*AccountCredential, total int64) *CredentialListResponse {

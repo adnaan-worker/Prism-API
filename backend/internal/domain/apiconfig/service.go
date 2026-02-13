@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -49,25 +48,26 @@ func NewService(repo Repository, logger logger.Logger) Service {
 
 // CreateConfig 创建配置
 func (s *service) CreateConfig(ctx context.Context, req *CreateConfigRequest) (*ConfigResponse, error) {
+	// 设置 config_type 默认值
+	configType := req.ConfigType
+	if configType == "" {
+		configType = "direct"
+	}
+
 	// 验证 BaseURL
 	baseURL := strings.TrimSpace(req.BaseURL)
 	
-	// 如果是账号池格式，验证格式
-	if strings.HasPrefix(baseURL, "account_pool:") {
-		parts := strings.Split(baseURL, ":")
-		if len(parts) != 3 {
-			return nil, errors.NewValidationError("invalid account pool format", map[string]string{
-				"base_url": "account pool format should be: account_pool:provider:pool_id",
+	// 如果是账号池类型，不需要 base_url
+	if configType == "account_pool" {
+		if req.AccountPoolID == nil || *req.AccountPoolID == 0 {
+			return nil, errors.NewValidationError("account_pool_id is required for account_pool type", map[string]string{
+				"account_pool_id": "required when config_type is account_pool",
 			})
 		}
-		// 验证 pool_id 是数字
-		if _, err := strconv.ParseUint(parts[2], 10, 32); err != nil {
-			return nil, errors.NewValidationError("invalid pool id", map[string]string{
-				"base_url": "pool_id must be a valid number",
-			})
-		}
+		// 账号池类型不需要 base_url
+		baseURL = ""
 	} else {
-		// 非账号池格式，验证是否为有效 URL（除了 kiro 类型）
+		// 直接调用类型需要验证 base_url
 		if req.Type != "kiro" {
 			if baseURL == "" {
 				return nil, errors.NewValidationError("base_url is required", map[string]string{
@@ -104,18 +104,20 @@ func (s *service) CreateConfig(ctx context.Context, req *CreateConfigRequest) (*
 
 	// 创建配置
 	config := &APIConfig{
-		Name:     req.Name,
-		Type:     req.Type,
-		BaseURL:  baseURL,
-		APIKey:   req.APIKey,
-		Models:   req.Models,
-		Headers:  req.Headers,
-		Metadata: req.Metadata,
-		IsActive: true,
-		Priority: priority,
-		Weight:   weight,
-		MaxRPS:   req.MaxRPS,
-		Timeout:  timeout,
+		Name:          req.Name,
+		Type:          req.Type,
+		ConfigType:    configType,
+		AccountPoolID: req.AccountPoolID,
+		BaseURL:       baseURL,
+		APIKey:        req.APIKey,
+		Models:        req.Models,
+		Headers:       req.Headers,
+		Metadata:      req.Metadata,
+		IsActive:      true,
+		Priority:      priority,
+		Weight:        weight,
+		MaxRPS:        req.MaxRPS,
+		Timeout:       timeout,
 	}
 
 	if err := s.repo.Create(ctx, config); err != nil {
@@ -263,6 +265,12 @@ func (s *service) UpdateConfig(ctx context.Context, id uint, req *UpdateConfigRe
 	}
 	if req.Type != "" {
 		config.Type = req.Type
+	}
+	if req.ConfigType != nil {
+		config.ConfigType = *req.ConfigType
+	}
+	if req.AccountPoolID != nil {
+		config.AccountPoolID = req.AccountPoolID
 	}
 	if req.BaseURL != "" {
 		config.BaseURL = req.BaseURL

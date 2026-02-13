@@ -1,10 +1,34 @@
 package accountpool
 
 import (
+	"database/sql/driver"
+	"encoding/json"
 	"time"
 
 	"gorm.io/gorm"
 )
+
+// JSONMap JSON 对象类型
+type JSONMap map[string]interface{}
+
+func (j JSONMap) Value() (driver.Value, error) {
+	if j == nil {
+		return json.Marshal(map[string]interface{}{})
+	}
+	return json.Marshal(j)
+}
+
+func (j *JSONMap) Scan(value interface{}) error {
+	if value == nil {
+		*j = map[string]interface{}{}
+		return nil
+	}
+	bytes, ok := value.([]byte)
+	if !ok {
+		return nil
+	}
+	return json.Unmarshal(bytes, j)
+}
 
 // AccountPool 账号池模型
 type AccountPool struct {
@@ -154,20 +178,18 @@ type AccountCredential struct {
 	Provider string `gorm:"column:provider_type;not null;size:50" json:"provider"`
 
 	// 认证类型
-	AuthType string `gorm:"not null;size:50;default:'api_key'" json:"auth_type"` // api_key, oauth, session_token
+	AuthType string `gorm:"not null;size:50;default:'api_key'" json:"auth_type"` // api_key, oauth
 
 	// 凭据信息（加密存储）
 	APIKey       string `gorm:"type:text" json:"api_key,omitempty"`
 	AccessToken  string `gorm:"type:text" json:"access_token,omitempty"`
 	RefreshToken string `gorm:"type:text" json:"refresh_token,omitempty"`
-	SessionToken string `gorm:"type:text" json:"session_token,omitempty"`
 
 	// OAuth 相关
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 
-	// 账号信息
-	AccountName  string `gorm:"size:255" json:"account_name,omitempty"`
-	AccountEmail string `gorm:"size:255" json:"account_email,omitempty"`
+	// 扩展信息（JSON 存储，不同提供商可以存储不同的数据）
+	Metadata JSONMap `gorm:"type:jsonb;default:'{}'" json:"metadata,omitempty"`
 
 	// 权重（用于加权轮询）
 	Weight int `gorm:"not null;default:1" json:"weight"`
@@ -175,44 +197,19 @@ type AccountCredential struct {
 	// 状态
 	IsActive bool `gorm:"column:is_active;not null;default:true" json:"is_active"`
 
-	// 账号状态
-	Status       string     `gorm:"size:50;default:'unknown'" json:"status"` // active, expired, error, refreshing, unknown
-	LastError    string     `gorm:"type:text" json:"last_error,omitempty"`
-
 	// 健康状态
-	HealthStatus  string     `gorm:"size:50;default:'unknown'" json:"health_status"` // healthy, unhealthy, unknown
-	LastCheckedAt *time.Time `json:"last_checked_at,omitempty"`
-	LastUsedAt    *time.Time `json:"last_used_at,omitempty"`
+	HealthStatus string     `gorm:"size:50;default:'unknown'" json:"health_status"` // healthy, unhealthy, unknown
+	LastError    string     `gorm:"type:text" json:"last_error,omitempty"`
+	LastUsedAt   *time.Time `json:"last_used_at,omitempty"`
 
 	// 统计
 	TotalRequests int64 `gorm:"not null;default:0" json:"total_requests"`
 	TotalErrors   int64 `gorm:"not null;default:0" json:"total_errors"`
 
-	// 订阅信息
-	SubscriptionType          string     `gorm:"size:50" json:"subscription_type,omitempty"`           // Free, Pro, Pro_Plus, Enterprise
-	SubscriptionTitle         string     `gorm:"size:255" json:"subscription_title,omitempty"`
-	SubscriptionExpiresAt     *time.Time `json:"subscription_expires_at,omitempty"`
-	SubscriptionDaysRemaining *int       `json:"subscription_days_remaining,omitempty"`
-
-	// 使用量详情
-	UsageCurrent        int        `gorm:"not null;default:0" json:"usage_current"`
-	UsageLimit          int        `gorm:"not null;default:0" json:"usage_limit"`
-	UsagePercent        float64    `gorm:"type:decimal(5,2);default:0" json:"usage_percent"`
-	UsageLastUpdated    *time.Time `json:"usage_last_updated,omitempty"`
-	BaseLimit           int        `gorm:"not null;default:0" json:"base_limit"`
-	BaseCurrent         int        `gorm:"not null;default:0" json:"base_current"`
-	FreeTrialLimit      int        `gorm:"not null;default:0" json:"free_trial_limit"`
-	FreeTrialCurrent    int        `gorm:"not null;default:0" json:"free_trial_current"`
-	FreeTrialExpiry     *time.Time `json:"free_trial_expiry,omitempty"`
-	NextResetDate       *time.Time `json:"next_reset_date,omitempty"`
-
-	// 机器码
-	MachineID string `gorm:"size:255" json:"machine_id,omitempty"`
-
 	// 速率限制
-	RateLimit         int `gorm:"not null;default:0" json:"rate_limit"`          // 每分钟请求数，0表示无限制
-	CurrentUsage      int `gorm:"not null;default:0" json:"current_usage"`       // 当前分钟使用量
-	RateLimitResetAt  *time.Time `json:"rate_limit_reset_at,omitempty"`
+	RateLimit        int        `gorm:"not null;default:0" json:"rate_limit"`         // 每分钟请求数，0表示无限制
+	CurrentUsage     int        `gorm:"not null;default:0" json:"current_usage"`      // 当前分钟使用量
+	RateLimitResetAt *time.Time `json:"rate_limit_reset_at,omitempty"`
 }
 
 // TableName 指定表名
@@ -268,8 +265,6 @@ func (c *AccountCredential) GetErrorRate() float64 {
 // UpdateHealthStatus 更新健康状态
 func (c *AccountCredential) UpdateHealthStatus(status string) {
 	c.HealthStatus = status
-	now := time.Now()
-	c.LastCheckedAt = &now
 }
 
 // IsRateLimited 检查是否达到速率限制
@@ -300,16 +295,14 @@ func (c *AccountCredential) IncrementUsage() {
 
 // 认证类型常量
 const (
-	AuthTypeAPIKey       = "api_key"
-	AuthTypeOAuth        = "oauth"
-	AuthTypeSessionToken = "session_token"
+	AuthTypeAPIKey = "api_key"
+	AuthTypeOAuth  = "oauth"
 )
 
 // ValidAuthTypes 有效的认证类型列表
 var ValidAuthTypes = []string{
 	AuthTypeAPIKey,
 	AuthTypeOAuth,
-	AuthTypeSessionToken,
 }
 
 // IsValidAuthType 检查认证类型是否有效

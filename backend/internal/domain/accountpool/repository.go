@@ -3,6 +3,7 @@ package accountpool
 import (
 	"api-aggregator/backend/pkg/query"
 	"context"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -29,6 +30,7 @@ type Repository interface {
 	UpdateCredentialStatus(ctx context.Context, id uint, isActive bool) error
 	IncrementCredentialRequests(ctx context.Context, id uint) error
 	IncrementCredentialErrors(ctx context.Context, id uint) error
+	FindExpiringCredentials(ctx context.Context, provider string, threshold time.Time) ([]*AccountCredential, error)
 	
 	// 请求日志相关
 	CreateRequestLog(ctx context.Context, log *AccountPoolRequestLog) error
@@ -320,6 +322,16 @@ func (r *repository) IncrementCredentialErrors(ctx context.Context, id uint) err
 		Where("id = ?", id).
 		UpdateColumn("total_errors", gorm.Expr("total_errors + ?", 1)).
 		Error
+}
+
+// FindExpiringCredentials 查找即将过期的凭据
+func (r *repository) FindExpiringCredentials(ctx context.Context, provider string, threshold time.Time) ([]*AccountCredential, error) {
+	var creds []*AccountCredential
+	err := r.db.WithContext(ctx).
+		Where("provider_type = ? AND is_active = ? AND expires_at IS NOT NULL AND expires_at <= ?", 
+			provider, true, threshold).
+		Find(&creds).Error
+	return creds, err
 }
 
 // FindActiveCredentialsByPoolID 查找账号池的所有活跃凭据

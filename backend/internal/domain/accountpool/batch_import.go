@@ -115,6 +115,33 @@ func (s *service) BatchImport(ctx context.Context, poolID uint, accounts []KiroA
 			expiresAt = &t
 		}
 
+		// 构建 Metadata
+		metadata := JSONMap{
+			"client_id":     acc.Credentials.ClientID,
+			"client_secret": acc.Credentials.ClientSecret,
+			"account_name":  acc.Nickname,
+			"account_email": acc.Email,
+		}
+		
+		// 添加订阅信息
+		if acc.Subscription.Type != "" {
+			metadata["subscription"] = map[string]interface{}{
+				"type":            acc.Subscription.Type,
+				"title":           acc.Subscription.Title,
+				"expires_at":      subscriptionExpiresAt,
+				"days_remaining":  daysRemaining,
+			}
+		}
+		
+		// 添加使用量信息
+		if acc.Usage.Limit > 0 {
+			metadata["usage"] = map[string]interface{}{
+				"current": acc.Usage.Current,
+				"limit":   acc.Usage.Limit,
+				"percent": usagePercent,
+			}
+		}
+
 		// 构建凭据
 		cred := &AccountCredential{
 			PoolID:       poolID,
@@ -122,35 +149,21 @@ func (s *service) BatchImport(ctx context.Context, poolID uint, accounts []KiroA
 			AuthType:     AuthTypeOAuth,
 			AccessToken:  acc.Credentials.AccessToken,
 			RefreshToken: acc.Credentials.RefreshToken,
-			SessionToken: fmt.Sprintf(`{"clientId":"%s","clientSecret":"%s"}`, acc.Credentials.ClientID, acc.Credentials.ClientSecret), // 存储 OIDC 凭据
-			AccountName:  acc.Nickname,
-			AccountEmail: acc.Email,
+			ExpiresAt:    expiresAt,
+			Metadata:     metadata,
 			Weight:       defaultWeight,
 			IsActive:     acc.Status == "active",
-			Status:       acc.Status,
 			HealthStatus: HealthStatusUnknown,
 			RateLimit:    defaultRateLimit,
-			ExpiresAt:    expiresAt,
-			
-			// 订阅信息
-			SubscriptionType:          acc.Subscription.Type,
-			SubscriptionTitle:         acc.Subscription.Title,
-			SubscriptionExpiresAt:     subscriptionExpiresAt,
-			SubscriptionDaysRemaining: daysRemaining,
-			
-			// 使用量信息
-			UsageCurrent:     acc.Usage.Current,
-			UsageLimit:       acc.Usage.Limit,
-			UsagePercent:     usagePercent,
-			UsageLastUpdated: &time.Time{},
-			
-			// 机器码
-			MachineID: "", // 可以从 acc 中提取，如果有的话
 		}
 		
-		// 设置使用量最后更新时间为当前时间
-		now := time.Now()
-		cred.UsageLastUpdated = &now
+		// 设置使用量最后更新时间到 Metadata
+		if cred.Metadata == nil {
+			cred.Metadata = make(JSONMap)
+		}
+		if usage, ok := cred.Metadata["usage"].(map[string]interface{}); ok {
+			usage["last_updated"] = time.Now()
+		}
 
 		// 尝试创建凭据
 		if err := s.repo.CreateCredential(ctx, cred); err != nil {

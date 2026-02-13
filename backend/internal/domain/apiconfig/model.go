@@ -52,6 +52,12 @@ func (j *JSONMap) Scan(value interface{}) error {
 	return json.Unmarshal(bytes, j)
 }
 
+// 配置类型常量
+const (
+	ConfigTypeDirect      = "direct"       // 直接调用第三方 API
+	ConfigTypeAccountPool = "account_pool" // 使用账号池
+)
+
 // APIConfig API配置模型
 type APIConfig struct {
 	ID        uint           `gorm:"primarykey" json:"id"`
@@ -59,17 +65,26 @@ type APIConfig struct {
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 	Name      string         `gorm:"not null;size:255" json:"name"`
-	Type      string         `gorm:"not null;size:50" json:"type"`
-	BaseURL   string         `gorm:"not null;type:text" json:"base_url"`
-	APIKey    string         `gorm:"type:text" json:"api_key,omitempty"`
-	Models    StringArray    `gorm:"type:jsonb;not null;default:'[]'" json:"models"`
-	Headers   JSONMap        `gorm:"type:jsonb" json:"headers,omitempty"`
-	Metadata  JSONMap        `gorm:"type:jsonb" json:"metadata,omitempty"`
-	IsActive  bool           `gorm:"not null;default:true" json:"is_active"`
-	Priority  int            `gorm:"not null;default:100" json:"priority"`
-	Weight    int            `gorm:"not null;default:1" json:"weight"`
-	MaxRPS    int            `gorm:"not null;default:0" json:"max_rps"`
-	Timeout   int            `gorm:"not null;default:30" json:"timeout"`
+	Type      string         `gorm:"not null;size:50" json:"type"` // openai, anthropic, gemini, kiro
+	
+	// 配置类型
+	ConfigType string `gorm:"not null;size:50;default:'direct'" json:"config_type"` // direct, account_pool
+	
+	// 直接调用配置
+	BaseURL string `gorm:"type:text" json:"base_url,omitempty"`
+	APIKey  string `gorm:"type:text" json:"api_key,omitempty"`
+	
+	// 账号池配置
+	AccountPoolID *uint `gorm:"index" json:"account_pool_id,omitempty"`
+	
+	Models   StringArray `gorm:"type:jsonb;not null;default:'[]'" json:"models"`
+	Headers  JSONMap     `gorm:"type:jsonb" json:"headers,omitempty"`
+	Metadata JSONMap     `gorm:"type:jsonb" json:"metadata,omitempty"`
+	IsActive bool        `gorm:"not null;default:true" json:"is_active"`
+	Priority int         `gorm:"not null;default:100" json:"priority"`
+	Weight   int         `gorm:"not null;default:1" json:"weight"`
+	MaxRPS   int         `gorm:"not null;default:0" json:"max_rps"`
+	Timeout  int         `gorm:"not null;default:30" json:"timeout"`
 }
 
 // TableName 指定表名
@@ -172,4 +187,14 @@ func (c *APIConfig) GetAPIKey() string {
 // GetTimeout 获取超时时间（实现 adapter.APIConfigInterface）
 func (c *APIConfig) GetTimeout() int {
 	return c.Timeout
+}
+
+// IsDirect 是否是直接调用
+func (c *APIConfig) IsDirect() bool {
+	return c.ConfigType == ConfigTypeDirect
+}
+
+// IsAccountPool 是否使用账号池
+func (c *APIConfig) IsAccountPool() bool {
+	return c.ConfigType == ConfigTypeAccountPool
 }

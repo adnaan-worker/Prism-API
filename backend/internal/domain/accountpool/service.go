@@ -4,6 +4,7 @@ import (
 	"api-aggregator/backend/pkg/errors"
 	"api-aggregator/backend/pkg/query"
 	"context"
+	"encoding/json"
 	"fmt"
 )
 
@@ -262,13 +263,30 @@ func (s *service) CreateCredential(ctx context.Context, req *CreateCredentialReq
 	// 验证认证类型
 	if !IsValidAuthType(req.AuthType) {
 		return nil, errors.NewValidationError("invalid auth type", map[string]string{
-			"auth_type": "must be one of: api_key, oauth, session_token",
+			"auth_type": "must be one of: api_key, oauth",
 		})
 	}
 
 	// 设置默认值
 	if req.Weight == 0 {
 		req.Weight = 1
+	}
+
+	// 构建 Metadata
+	metadata := JSONMap{}
+	if req.SessionToken != "" {
+		// 解析 SessionToken 为 client_id 和 client_secret
+		var tokenData map[string]string
+		if err := json.Unmarshal([]byte(req.SessionToken), &tokenData); err == nil {
+			metadata["client_id"] = tokenData["clientId"]
+			metadata["client_secret"] = tokenData["clientSecret"]
+		}
+	}
+	if req.AccountName != "" {
+		metadata["account_name"] = req.AccountName
+	}
+	if req.AccountEmail != "" {
+		metadata["account_email"] = req.AccountEmail
 	}
 
 	// 创建凭据
@@ -279,9 +297,7 @@ func (s *service) CreateCredential(ctx context.Context, req *CreateCredentialReq
 		APIKey:       req.APIKey,
 		AccessToken:  req.AccessToken,
 		RefreshToken: req.RefreshToken,
-		SessionToken: req.SessionToken,
-		AccountName:  req.AccountName,
-		AccountEmail: req.AccountEmail,
+		Metadata:     metadata,
 		Weight:       req.Weight,
 		IsActive:     true,
 		HealthStatus: HealthStatusUnknown,
@@ -314,13 +330,27 @@ func (s *service) UpdateCredential(ctx context.Context, id uint, req *UpdateCred
 		cred.RefreshToken = *req.RefreshToken
 	}
 	if req.SessionToken != nil {
-		cred.SessionToken = *req.SessionToken
+		// 解析并更新到 Metadata
+		var tokenData map[string]string
+		if err := json.Unmarshal([]byte(*req.SessionToken), &tokenData); err == nil {
+			if cred.Metadata == nil {
+				cred.Metadata = make(JSONMap)
+			}
+			cred.Metadata["client_id"] = tokenData["clientId"]
+			cred.Metadata["client_secret"] = tokenData["clientSecret"]
+		}
 	}
 	if req.AccountName != nil {
-		cred.AccountName = *req.AccountName
+		if cred.Metadata == nil {
+			cred.Metadata = make(JSONMap)
+		}
+		cred.Metadata["account_name"] = *req.AccountName
 	}
 	if req.AccountEmail != nil {
-		cred.AccountEmail = *req.AccountEmail
+		if cred.Metadata == nil {
+			cred.Metadata = make(JSONMap)
+		}
+		cred.Metadata["account_email"] = *req.AccountEmail
 	}
 	if req.Weight != nil {
 		cred.Weight = *req.Weight
@@ -412,7 +442,6 @@ func (s *service) RefreshCredential(ctx context.Context, id uint) (*CredentialRe
 		// 调用 Kiro 刷新服务
 		if err := s.kiroRefreshService.RefreshKiroToken(ctx, cred); err != nil {
 			// 刷新失败，标记为不健康
-			cred.Status = "error"
 			cred.HealthStatus = HealthStatusUnhealthy
 			cred.LastError = fmt.Sprintf("Token refresh failed: %v", err)
 			s.repo.UpdateCredential(ctx, cred)
@@ -422,12 +451,10 @@ func (s *service) RefreshCredential(ctx context.Context, id uint) (*CredentialRe
 	case "openai", "anthropic", "gemini":
 		// 其他提供商：API Key 类型，执行健康检查
 		cred.UpdateHealthStatus(HealthStatusHealthy)
-		cred.Status = "active"
 		
 	default:
 		// 未知提供商
 		cred.UpdateHealthStatus(HealthStatusUnknown)
-		cred.Status = "unknown"
 	}
 
 	// 保存更新

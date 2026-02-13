@@ -16,6 +16,8 @@ export interface APIConfig {
   id: number;
   name: string;
   type: string;
+  config_type?: string; // 'direct' or 'account_pool'
+  account_pool_id?: number;
   base_url: string;
   api_key?: string;
   models: string[];

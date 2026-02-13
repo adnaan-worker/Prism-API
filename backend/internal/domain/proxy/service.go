@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"api-aggregator/backend/internal/adapter"
+	"api-aggregator/backend/internal/domain/accountpool"
 	"api-aggregator/backend/internal/domain/apiconfig"
 	"api-aggregator/backend/internal/domain/cache"
 	"api-aggregator/backend/internal/domain/loadbalancer"
@@ -31,6 +32,7 @@ type Service interface {
 type service struct {
 	adapterFactory  *adapter.Factory
 	apiConfigRepo   apiconfig.Repository
+	poolManager     *accountpool.PoolManager
 	loadBalancerSvc loadbalancer.Service
 	cacheService    cache.Service
 	quotaService    quota.Service
@@ -45,6 +47,7 @@ type service struct {
 func NewService(
 	adapterFactory *adapter.Factory,
 	apiConfigRepo apiconfig.Repository,
+	poolManager *accountpool.PoolManager,
 	loadBalancerSvc loadbalancer.Service,
 	cacheService cache.Service,
 	quotaService quota.Service,
@@ -56,6 +59,7 @@ func NewService(
 	return &service{
 		adapterFactory:  adapterFactory,
 		apiConfigRepo:   apiConfigRepo,
+		poolManager:     poolManager,
 		loadBalancerSvc: loadBalancerSvc,
 		cacheService:    cacheService,
 		quotaService:    quotaService,
@@ -106,18 +110,54 @@ func (s *service) ChatCompletions(ctx context.Context, req *ProxyRequest) (*adap
 		return nil, err
 	}
 
-	// 5. 创建适配器并调用
-	adapterInstance, err := s.adapterFactory.CreateAdapter(apiConfig)
-	if err != nil {
-		return nil, errors.Wrap(err, 500003, "Failed to create adapter")
+	// 5. 根据配置类型创建适配器
+	var adapterInstance adapter.Adapter
+	var credentialID uint
+	
+	if apiConfig.IsDirect() {
+		// 直接调用
+		adapterInstance, err = s.adapterFactory.CreateAdapter(apiConfig)
+		if err != nil {
+			return nil, errors.Wrap(err, 500003, "Failed to create adapter")
+		}
+	} else if apiConfig.IsAccountPool() {
+		// 使用账号池
+		if apiConfig.AccountPoolID == nil {
+			return nil, errors.New(500001, "Account pool ID is required")
+		}
+		
+		var poolAdapter interface{}
+		poolAdapter, credentialID, err = s.poolManager.GetAdapter(ctx, *apiConfig.AccountPoolID)
+		if err != nil {
+			return nil, errors.Wrap(err, 500003, "Failed to get adapter from pool")
+		}
+		
+		// 类型断言
+		var ok bool
+		adapterInstance, ok = poolAdapter.(adapter.Adapter)
+		if !ok {
+			return nil, errors.New(500001, "Invalid adapter type from pool")
+		}
+	} else {
+		return nil, errors.New(500001, "Invalid config type")
 	}
 
 	// 6. 调用上游 API
 	resp, err := adapterInstance.Call(ctx, req.ChatRequest)
 	if err != nil {
+		// 如果是账号池，记录错误
+		if apiConfig.IsAccountPool() && credentialID > 0 {
+			s.poolManager.RecordError(ctx, credentialID, err.Error())
+		}
+		
 		// 记录失败日志
 		s.logRequest(ctx, req, apiConfig.ID, 0, time.Since(startTime), err)
 		return nil, errors.Wrap(err, 500004, "Failed to call upstream API")
+	}
+	
+	// 如果是账号池，记录成功
+	if apiConfig.IsAccountPool() && credentialID > 0 {
+		s.poolManager.RecordSuccess(ctx, credentialID)
 	}
 
 	// 7. 计算费用并扣除配额
@@ -152,15 +192,45 @@ func (s *service) ChatCompletionsStream(ctx context.Context, req *ProxyRequest) 
 		return nil, err
 	}
 
-	// 3. 创建适配器并调用
-	adapterInstance, err := s.adapterFactory.CreateAdapter(apiConfig)
-	if err != nil {
-		return nil, errors.Wrap(err, 500003, "Failed to create adapter")
+	// 3. 根据配置类型创建适配器
+	var adapterInstance adapter.Adapter
+	var credentialID uint
+	
+	if apiConfig.IsDirect() {
+		// 直接调用
+		adapterInstance, err = s.adapterFactory.CreateAdapter(apiConfig)
+		if err != nil {
+			return nil, errors.Wrap(err, 500003, "Failed to create adapter")
+		}
+	} else if apiConfig.IsAccountPool() {
+		// 使用账号池
+		if apiConfig.AccountPoolID == nil {
+			return nil, errors.New(500001, "Account pool ID is required")
+		}
+		
+		var poolAdapter interface{}
+		poolAdapter, credentialID, err = s.poolManager.GetAdapter(ctx, *apiConfig.AccountPoolID)
+		if err != nil {
+			return nil, errors.Wrap(err, 500003, "Failed to get adapter from pool")
+		}
+		
+		// 类型断言
+		var ok bool
+		adapterInstance, ok = poolAdapter.(adapter.Adapter)
+		if !ok {
+			return nil, errors.New(500001, "Invalid adapter type from pool")
+		}
+	} else {
+		return nil, errors.New(500001, "Invalid config type")
 	}
 
 	// 4. 调用上游 API（流式）
 	resp, err := adapterInstance.CallStream(ctx, req.ChatRequest)
 	if err != nil {
+		// 如果是账号池，记录错误
+		if apiConfig.IsAccountPool() && credentialID > 0 {
+			s.poolManager.RecordError(ctx, credentialID, err.Error())
+		}
 		return nil, errors.Wrap(err, 500004, "Failed to call upstream API")
 	}
 
