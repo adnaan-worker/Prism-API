@@ -222,6 +222,8 @@ type CredentialResponse struct {
 	AccountEmail  string     `json:"account_email,omitempty"`
 	Weight        int        `json:"weight"`
 	IsActive      bool       `json:"is_active"`
+	Status        string     `json:"status"`
+	LastError     string     `json:"last_error,omitempty"`
 	HealthStatus  string     `json:"health_status"`
 	LastCheckedAt *time.Time `json:"last_checked_at,omitempty"`
 	LastUsedAt    *time.Time `json:"last_used_at,omitempty"`
@@ -232,6 +234,27 @@ type CredentialResponse struct {
 	IsExpired     bool       `json:"is_expired"`
 	RateLimit     int        `json:"rate_limit"`
 	CurrentUsage  int        `json:"current_usage"`
+	
+	// 订阅信息
+	SubscriptionType          string     `json:"subscription_type,omitempty"`
+	SubscriptionTitle         string     `json:"subscription_title,omitempty"`
+	SubscriptionExpiresAt     *time.Time `json:"subscription_expires_at,omitempty"`
+	SubscriptionDaysRemaining *int       `json:"subscription_days_remaining,omitempty"`
+	
+	// 使用量详情
+	UsageCurrent        int        `json:"usage_current"`
+	UsageLimit          int        `json:"usage_limit"`
+	UsagePercent        float64    `json:"usage_percent"`
+	UsageLastUpdated    *time.Time `json:"usage_last_updated,omitempty"`
+	BaseLimit           int        `json:"base_limit"`
+	BaseCurrent         int        `json:"base_current"`
+	FreeTrialLimit      int        `json:"free_trial_limit"`
+	FreeTrialCurrent    int        `json:"free_trial_current"`
+	FreeTrialExpiry     *time.Time `json:"free_trial_expiry,omitempty"`
+	NextResetDate       *time.Time `json:"next_reset_date,omitempty"`
+	
+	// 机器码
+	MachineID string `json:"machine_id,omitempty"`
 	// 敏感信息不返回
 }
 
@@ -266,6 +289,8 @@ func ToCredentialResponse(cred *AccountCredential) *CredentialResponse {
 		AccountEmail:  cred.AccountEmail,
 		Weight:        cred.Weight,
 		IsActive:      cred.IsActive,
+		Status:        cred.Status,
+		LastError:     cred.LastError,
 		HealthStatus:  cred.HealthStatus,
 		LastCheckedAt: cred.LastCheckedAt,
 		LastUsedAt:    cred.LastUsedAt,
@@ -276,6 +301,27 @@ func ToCredentialResponse(cred *AccountCredential) *CredentialResponse {
 		IsExpired:     cred.IsExpired(),
 		RateLimit:     cred.RateLimit,
 		CurrentUsage:  cred.CurrentUsage,
+		
+		// 订阅信息
+		SubscriptionType:          cred.SubscriptionType,
+		SubscriptionTitle:         cred.SubscriptionTitle,
+		SubscriptionExpiresAt:     cred.SubscriptionExpiresAt,
+		SubscriptionDaysRemaining: cred.SubscriptionDaysRemaining,
+		
+		// 使用量详情
+		UsageCurrent:        cred.UsageCurrent,
+		UsageLimit:          cred.UsageLimit,
+		UsagePercent:        cred.UsagePercent,
+		UsageLastUpdated:    cred.UsageLastUpdated,
+		BaseLimit:           cred.BaseLimit,
+		BaseCurrent:         cred.BaseCurrent,
+		FreeTrialLimit:      cred.FreeTrialLimit,
+		FreeTrialCurrent:    cred.FreeTrialCurrent,
+		FreeTrialExpiry:     cred.FreeTrialExpiry,
+		NextResetDate:       cred.NextResetDate,
+		
+		// 机器码
+		MachineID: cred.MachineID,
 	}
 }
 

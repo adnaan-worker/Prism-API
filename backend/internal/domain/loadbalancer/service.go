@@ -16,6 +16,7 @@ type Service interface {
 	GetConfigByModel(ctx context.Context, modelName string) (*ConfigResponse, error)
 	ListConfigs(ctx context.Context, filter *ConfigFilter, opts *query.Options) (*ConfigListResponse, error)
 	GetModelEndpoints(ctx context.Context, modelName string) (*ModelEndpointsResponse, error)
+	GetAvailableModels(ctx context.Context) ([]string, error)
 	ActivateConfig(ctx context.Context, id uint) error
 	DeactivateConfig(ctx context.Context, id uint) error
 }
@@ -218,4 +219,29 @@ func (s *service) GetModelEndpoints(ctx context.Context, modelName string) (*Mod
 		Endpoints: endpoints,
 		Total:     len(endpoints),
 	}, nil
+}
+
+// GetAvailableModels 获取所有可用的模型列表（从 API 配置中提取）
+func (s *service) GetAvailableModels(ctx context.Context) ([]string, error) {
+	// 获取所有激活的 API 配置
+	configs, err := s.apiConfigRepo.FindActive(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get API configs")
+	}
+
+	// 收集所有模型
+	modelSet := make(map[string]bool)
+	for _, config := range configs {
+		for _, model := range config.Models {
+			modelSet[model] = true
+		}
+	}
+
+	// 转换为数组
+	models := make([]string, 0, len(modelSet))
+	for model := range modelSet {
+		models = append(models, model)
+	}
+
+	return models, nil
 }

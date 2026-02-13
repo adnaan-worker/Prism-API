@@ -4,6 +4,7 @@ import (
 	"api-aggregator/backend/pkg/errors"
 	"api-aggregator/backend/pkg/query"
 	"context"
+	"fmt"
 )
 
 // Service 账号池服务接口
@@ -28,16 +29,22 @@ type Service interface {
 	// 请求日志相关
 	CreateRequestLog(ctx context.Context, log *AccountPoolRequestLog) error
 	ListRequestLogs(ctx context.Context, filter *RequestLogFilter, opts *query.Options) (*RequestLogListResponse, error)
+	
+	// 批量导入
+	BatchImport(ctx context.Context, poolID uint, accounts []KiroAccountImport, defaultWeight int, defaultRateLimit int) (*BatchImportResponse, error)
+	BatchImportFromJSON(ctx context.Context, poolID uint, jsonData string, weight int, rateLimit int) (*BatchImportResponse, error)
 }
 
 type service struct {
-	repo Repository
+	repo               Repository
+	kiroRefreshService *KiroRefreshService
 }
 
 // NewService 创建账号池服务实例
 func NewService(repo Repository) Service {
 	return &service{
-		repo: repo,
+		repo:               repo,
+		kiroRefreshService: NewKiroRefreshService(),
 	}
 }
 
@@ -392,36 +399,40 @@ func (s *service) RefreshCredential(ctx context.Context, id uint) (*CredentialRe
 		return nil, errors.NewNotFoundError("credential not found")
 	}
 
-	// 根据认证类型执行刷新逻辑
-	switch cred.AuthType {
-	case AuthTypeOAuth:
-		// OAuth 刷新：如果有 refresh_token，可以调用刷新接口
-		// 这里只是标记为健康，实际刷新逻辑需要根据具体提供商实现
-		if cred.RefreshToken != "" {
-			// TODO: 实现具体的 OAuth 刷新逻辑
-			// 例如：调用提供商的 token 刷新接口
+	// 根据提供商类型执行刷新逻辑
+	switch cred.Provider {
+	case "kiro":
+		// Kiro 刷新：使用 refresh_token 调用 AWS OIDC 刷新接口
+		if cred.RefreshToken == "" {
+			return nil, errors.NewValidationError("refresh token is empty", map[string]string{
+				"refresh_token": "refresh token is required for kiro credential refresh",
+			})
 		}
-		cred.UpdateHealthStatus(HealthStatusHealthy)
 		
-	case AuthTypeAPIKey:
-		// API Key 类型：执行健康检查
-		// 可以尝试调用一个简单的 API 来验证 key 是否有效
-		cred.UpdateHealthStatus(HealthStatusHealthy)
-		
-	case AuthTypeSessionToken:
-		// Session Token 类型：标记为需要重新登录
-		if cred.IsExpired() {
-			cred.UpdateHealthStatus(HealthStatusUnhealthy)
-		} else {
-			cred.UpdateHealthStatus(HealthStatusHealthy)
+		// 调用 Kiro 刷新服务
+		if err := s.kiroRefreshService.RefreshKiroToken(ctx, cred); err != nil {
+			// 刷新失败，标记为不健康
+			cred.Status = "error"
+			cred.HealthStatus = HealthStatusUnhealthy
+			cred.LastError = fmt.Sprintf("Token refresh failed: %v", err)
+			s.repo.UpdateCredential(ctx, cred)
+			return nil, errors.Wrap(err, "failed to refresh kiro token")
 		}
+		
+	case "openai", "anthropic", "gemini":
+		// 其他提供商：API Key 类型，执行健康检查
+		cred.UpdateHealthStatus(HealthStatusHealthy)
+		cred.Status = "active"
 		
 	default:
+		// 未知提供商
 		cred.UpdateHealthStatus(HealthStatusUnknown)
+		cred.Status = "unknown"
 	}
 
+	// 保存更新
 	if err := s.repo.UpdateCredential(ctx, cred); err != nil {
-		return nil, errors.Wrap(err, "failed to refresh credential")
+		return nil, errors.Wrap(err, "failed to update credential after refresh")
 	}
 
 	return ToCredentialResponse(cred), nil

@@ -3,6 +3,7 @@ package accountpool
 import (
 	"api-aggregator/backend/pkg/query"
 	"api-aggregator/backend/pkg/response"
+	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -470,4 +471,74 @@ func (h *Handler) RefreshCredential(c *gin.Context) {
 	}
 
 	response.Success(c, cred)
+}
+
+// BatchImportCredentials 批量导入凭据
+// @Summary 批量导入凭据
+// @Description 从 JSON 批量导入 Kiro 账号
+// @Tags AccountPool
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body BatchImportRequest true "批量导入请求"
+// @Success 200 {object} BatchImportResponse
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /admin/account-pools/batch-import [post]
+func (h *Handler) BatchImportCredentials(c *gin.Context) {
+	var req BatchImportRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, 400001, "Invalid request body", err)
+		return
+	}
+
+	// 批量导入
+	result, err := h.service.BatchImport(c.Request.Context(), req.PoolID, req.Accounts, req.Weight, req.RateLimit)
+	if err != nil {
+		response.ErrorFromError(c, err)
+		return
+	}
+
+	response.Success(c, result)
+}
+
+// BatchImportCredentialsFromJSON 从 JSON 字符串批量导入凭据
+// @Summary 从 JSON 字符串批量导入凭据
+// @Description 从 JSON 字符串批量导入 Kiro 账号
+// @Tags AccountPool
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param pool_id query int true "账号池ID"
+// @Param weight query int false "默认权重" default(1)
+// @Param rate_limit query int false "默认速率限制" default(0)
+// @Param json body string true "JSON 字符串"
+// @Success 200 {object} BatchImportResponse
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /admin/account-pools/batch-import-json [post]
+func (h *Handler) BatchImportCredentialsFromJSON(c *gin.Context) {
+	// 获取参数
+	var req struct {
+		PoolID     uint   `json:"pool_id" binding:"required"`
+		JSONData   string `json:"json_data" binding:"required"`
+		Weight     int    `json:"weight"`
+		RateLimit  int    `json:"rate_limit"`
+	}
+	
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, 400001, "Invalid request body", err)
+		return
+	}
+
+	// 批量导入
+	result, err := h.service.BatchImportFromJSON(c.Request.Context(), req.PoolID, req.JSONData, req.Weight, req.RateLimit)
+	if err != nil {
+		response.ErrorFromError(c, err)
+		return
+	}
+
+	response.Success(c, result)
 }

@@ -281,6 +281,7 @@ func (r *Router) setupAdminLoadBalancerRoutes(group *gin.RouterGroup) {
 		lb.DELETE("/configs/:id", r.loadBalancerHandler.DeleteConfig)
 		lb.POST("/configs/:id/activate", r.loadBalancerHandler.ActivateConfig)
 		lb.POST("/configs/:id/deactivate", r.loadBalancerHandler.DeactivateConfig)
+		lb.GET("/models", r.loadBalancerHandler.GetAvailableModels)
 		lb.GET("/models/:model/config", r.loadBalancerHandler.GetConfigByModel)
 		lb.GET("/models/:model/endpoints", r.loadBalancerHandler.GetModelEndpoints)
 	}
@@ -306,6 +307,10 @@ func (r *Router) setupAdminAccountPoolRoutes(group *gin.RouterGroup) {
 		pools.DELETE("/credentials/:id", r.accountPoolHandler.DeleteCredential)
 		pools.PUT("/credentials/:id/status", r.accountPoolHandler.UpdateCredentialStatus)
 		pools.POST("/credentials/:id/refresh", r.accountPoolHandler.RefreshCredential)
+		
+		// 批量导入
+		pools.POST("/batch-import", r.accountPoolHandler.BatchImportCredentials)
+		pools.POST("/batch-import-json", r.accountPoolHandler.BatchImportCredentialsFromJSON)
 		
 		// 请求日志
 		pools.GET("/request-logs", r.accountPoolHandler.ListRequestLogs)

@@ -175,6 +175,10 @@ type AccountCredential struct {
 	// 状态
 	IsActive bool `gorm:"column:is_active;not null;default:true" json:"is_active"`
 
+	// 账号状态
+	Status       string     `gorm:"size:50;default:'unknown'" json:"status"` // active, expired, error, refreshing, unknown
+	LastError    string     `gorm:"type:text" json:"last_error,omitempty"`
+
 	// 健康状态
 	HealthStatus  string     `gorm:"size:50;default:'unknown'" json:"health_status"` // healthy, unhealthy, unknown
 	LastCheckedAt *time.Time `json:"last_checked_at,omitempty"`
@@ -183,6 +187,27 @@ type AccountCredential struct {
 	// 统计
 	TotalRequests int64 `gorm:"not null;default:0" json:"total_requests"`
 	TotalErrors   int64 `gorm:"not null;default:0" json:"total_errors"`
+
+	// 订阅信息
+	SubscriptionType          string     `gorm:"size:50" json:"subscription_type,omitempty"`           // Free, Pro, Pro_Plus, Enterprise
+	SubscriptionTitle         string     `gorm:"size:255" json:"subscription_title,omitempty"`
+	SubscriptionExpiresAt     *time.Time `json:"subscription_expires_at,omitempty"`
+	SubscriptionDaysRemaining *int       `json:"subscription_days_remaining,omitempty"`
+
+	// 使用量详情
+	UsageCurrent        int        `gorm:"not null;default:0" json:"usage_current"`
+	UsageLimit          int        `gorm:"not null;default:0" json:"usage_limit"`
+	UsagePercent        float64    `gorm:"type:decimal(5,2);default:0" json:"usage_percent"`
+	UsageLastUpdated    *time.Time `json:"usage_last_updated,omitempty"`
+	BaseLimit           int        `gorm:"not null;default:0" json:"base_limit"`
+	BaseCurrent         int        `gorm:"not null;default:0" json:"base_current"`
+	FreeTrialLimit      int        `gorm:"not null;default:0" json:"free_trial_limit"`
+	FreeTrialCurrent    int        `gorm:"not null;default:0" json:"free_trial_current"`
+	FreeTrialExpiry     *time.Time `json:"free_trial_expiry,omitempty"`
+	NextResetDate       *time.Time `json:"next_reset_date,omitempty"`
+
+	// 机器码
+	MachineID string `gorm:"size:255" json:"machine_id,omitempty"`
 
 	// 速率限制
 	RateLimit         int `gorm:"not null;default:0" json:"rate_limit"`          // 每分钟请求数，0表示无限制
@@ -215,7 +240,9 @@ func (c *AccountCredential) IsExpired() bool {
 
 // IsHealthy 检查是否健康
 func (c *AccountCredential) IsHealthy() bool {
-	return c.IsActive && c.HealthStatus == "healthy" && !c.IsExpired()
+	// 允许 unknown 状态的凭据（新导入的凭据）
+	// 只有明确标记为 unhealthy 的才拒绝
+	return c.IsActive && c.HealthStatus != "unhealthy" && !c.IsExpired()
 }
 
 // IncrementRequests 增加请求计数

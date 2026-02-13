@@ -248,3 +248,19 @@ func (h *Handler) GetModelEndpoints(c *gin.Context) {
 
 	response.Success(c, endpoints)
 }
+
+// GetAvailableModels 获取所有可用的模型列表
+// @Summary 获取所有可用的模型列表
+// @Tags LoadBalancer
+// @Produce json
+// @Success 200 {object} object{models=[]string}
+// @Router /api/v1/admin/load-balancer/models [get]
+func (h *Handler) GetAvailableModels(c *gin.Context) {
+	models, err := h.service.GetAvailableModels(c.Request.Context())
+	if err != nil {
+		response.HandleError(c, err)
+		return
+	}
+
+	response.Success(c, gin.H{"models": models})
+}

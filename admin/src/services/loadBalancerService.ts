@@ -78,14 +78,11 @@ export const loadBalancerService = {
     await apiClient.delete(`/admin/load-balancer/configs/${id}`);
   },
 
-  // 获取可用模型列表（从配置中提取）
+  // 获取可用模型列表（从 API 配置中提取）
   getAvailableModels: async (): Promise<string[]> => {
-    const response = await apiClient.get<{ configs: LoadBalancerConfig[]; total: number }>(
-      '/admin/load-balancer/configs'
+    const response = await apiClient.get<{ models: string[] }>(
+      '/admin/load-balancer/models'
     );
-    const configs = response.data?.configs || [];
-    // 提取所有唯一的模型名称
-    const models = Array.from(new Set(configs.map(c => c.model_name)));
-    return models;
+    return response.data?.models || [];
   },
 };

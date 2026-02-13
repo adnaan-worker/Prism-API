@@ -15,7 +15,7 @@ type Service interface {
 	GetAPIKeyByID(ctx context.Context, userID uint, id uint) (*APIKeyResponse, error)
 	UpdateAPIKey(ctx context.Context, userID uint, id uint, req *UpdateAPIKeyRequest) error
 	DeleteAPIKey(ctx context.Context, userID uint, id uint) error
-	ValidateAPIKey(ctx context.Context, key string) (uint, error)
+	ValidateAPIKey(ctx context.Context, key string) (userID uint, apiKeyID uint, err error)
 }
 
 // service API密钥服务实现
@@ -214,20 +214,20 @@ func (s *service) DeleteAPIKey(ctx context.Context, userID uint, id uint) error 
 	return nil
 }
 
-// ValidateAPIKey 验证API密钥并返回用户ID
-func (s *service) ValidateAPIKey(ctx context.Context, key string) (uint, error) {
+// ValidateAPIKey 验证API密钥并返回用户ID和API Key ID
+func (s *service) ValidateAPIKey(ctx context.Context, key string) (userID uint, apiKeyID uint, err error) {
 	apiKey, err := s.repo.FindByKey(ctx, key)
 	if err != nil {
 		s.logger.Error("Failed to find API key", logger.Error(err))
-		return 0, errors.Wrap(err, 500002, "Failed to find API key")
+		return 0, 0, errors.Wrap(err, 500002, "Failed to find API key")
 	}
 	if apiKey == nil {
-		return 0, errors.ErrAPIKeyNotFound
+		return 0, 0, errors.ErrAPIKeyNotFound
 	}
 
 	// 检查密钥是否有效
 	if !apiKey.IsValid() {
-		return 0, errors.New(403001, "API key is inactive or deleted")
+		return 0, 0, errors.New(403001, "API key is inactive or deleted")
 	}
 
 	// 更新最后使用时间（异步，不影响主流程）
@@ -239,5 +239,5 @@ func (s *service) ValidateAPIKey(ctx context.Context, key string) (uint, error) 
 		}
 	}()
 
-	return apiKey.UserID, nil
+	return apiKey.UserID, apiKey.ID, nil
 }

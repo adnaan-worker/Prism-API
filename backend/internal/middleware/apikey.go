@@ -42,7 +42,7 @@ func (m *APIKey) Handle() gin.HandlerFunc {
 		key := parts[1]
 
 		// 验证API密钥
-		userID, err := m.apiKeyService.ValidateAPIKey(c.Request.Context(), key)
+		userID, apiKeyID, err := m.apiKeyService.ValidateAPIKey(c.Request.Context(), key)
 		if err != nil {
 			response.Unauthorized(c, "invalid or inactive API key")
 			c.Abort()
@@ -51,6 +51,7 @@ func (m *APIKey) Handle() gin.HandlerFunc {
 
 		// 设置用户信息到上下文
 		c.Set("user_id", userID)
+		c.Set("api_key_id", apiKeyID)
 		c.Set("api_key", key)
 		c.Next()
 	}

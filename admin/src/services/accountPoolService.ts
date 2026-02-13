@@ -71,4 +71,21 @@ export const accountPoolService = {
     const { data } = await api.put<AccountCredential>(`/admin/account-pools/credentials/${id}/status`, { is_active: isActive });
     return data;
   },
+
+  // 批量导入
+  batchImport: async (params: {
+    pool_id: number;
+    json_data: string;
+    weight?: number;
+    rate_limit?: number;
+  }) => {
+    const { data } = await api.post<{
+      total: number;
+      success: number;
+      failed: number;
+      errors?: string[];
+      created_ids?: number[];
+    }>('/admin/account-pools/batch-import-json', params);
+    return data;
+  },
 };

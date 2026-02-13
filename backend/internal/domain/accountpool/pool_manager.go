@@ -13,19 +13,21 @@ import (
 // PoolManager 账号池管理器
 // 负责从账号池中选择凭据并创建适配器
 type PoolManager struct {
-	repo          Repository
+	repo           Repository
 	adapterFactory *adapter.Factory
-	modelMapper   adapter.KiroModelMapper
-	mu            sync.RWMutex
-	roundRobinIdx map[uint]int // 轮询索引，key为poolID
+	modelMapper    adapter.KiroModelMapper
+	refreshService *KiroRefreshService
+	mu             sync.RWMutex
+	roundRobinIdx  map[uint]int // 轮询索引，key为poolID
 }
 
 // NewPoolManager 创建账号池管理器
 func NewPoolManager(repo Repository, modelMapper adapter.KiroModelMapper) *PoolManager {
 	return &PoolManager{
-		repo:          repo,
-		modelMapper:   modelMapper,
-		roundRobinIdx: make(map[uint]int),
+		repo:           repo,
+		modelMapper:    modelMapper,
+		refreshService: NewKiroRefreshService(),
+		roundRobinIdx:  make(map[uint]int),
 	}
 }
 
@@ -61,6 +63,21 @@ func (pm *PoolManager) GetAdapter(ctx context.Context, poolID uint) (interface{}
 	cred, err := pm.selectCredential(pool, creds)
 	if err != nil {
 		return nil, 0, err
+	}
+
+	// 如果是 Kiro 凭据且已过期，尝试刷新
+	if cred.Provider == "kiro" && cred.IsExpired() {
+		if err := pm.refreshService.RefreshKiroToken(ctx, cred); err != nil {
+			// 刷新失败，标记为不健康
+			cred.UpdateHealthStatus(HealthStatusUnhealthy)
+			cred.LastError = fmt.Sprintf("failed to refresh token: %v", err)
+			pm.repo.UpdateCredential(ctx, cred)
+			return nil, 0, errors.Wrap(err, 500001, "failed to refresh kiro token")
+		}
+		// 刷新成功，保存更新
+		if err := pm.repo.UpdateCredential(ctx, cred); err != nil {
+			return nil, 0, errors.Wrap(err, "failed to save refreshed credential")
+		}
 	}
 
 	// 检查凭据是否健康
@@ -189,13 +206,14 @@ func (pm *PoolManager) createKiroAdapter(cred *AccountCredential) (adapter.Adapt
 		Timeout: 120,
 	}
 
-	// 创建 Kiro 适配器，使用注入的 model mapper
+	// 创建 Kiro 适配器
+	// profileArn 对于 Social Auth (OAuth) 不需要，传空字符串
 	kiroAdapter := adapter.NewKiroAdapter(
 		config,
 		cred.AccessToken,
-		cred.SessionToken, // profileArn
-		"us-east-1",       // region
-		pm.modelMapper,    // model mapper
+		"",            // profileArn - not needed for Social Auth
+		"us-east-1",   // region
+		pm.modelMapper, // model mapper
 	)
 
 	return kiroAdapter, nil

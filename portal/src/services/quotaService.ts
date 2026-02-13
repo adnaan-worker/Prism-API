@@ -16,9 +16,9 @@ export const quotaService = {
 
   // Get usage history
   async getUsageHistory(days: number = 7): Promise<UsageHistoryItem[]> {
-    const response = await apiClient.get<UsageHistoryItem[]>('/user/usage-history', {
+    const response = await apiClient.get<{ history: UsageHistoryItem[]; days: number }>('/user/usage-history', {
       params: { days },
     });
-    return response.data;
+    return response.data.history || [];
   },
 };

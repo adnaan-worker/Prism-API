@@ -201,6 +201,8 @@ func Error(c *gin.Context, statusCode int, code int, message string, err error) 
 	details := ""
 	if err != nil {
 		details = err.Error()
+		// 添加错误到 gin.Context，以便日志中间件记录
+		_ = c.Error(err)
 	}
 	c.JSON(statusCode, ErrorResponse{
 		Error: ErrorDetail{
@@ -213,6 +215,9 @@ func Error(c *gin.Context, statusCode int, code int, message string, err error) 
 
 // ErrorFromError 从自定义错误创建响应
 func ErrorFromError(c *gin.Context, err error) {
+	// 添加错误到 gin.Context
+	_ = c.Error(err)
+	
 	// 尝试转换为 AppError
 	type appError interface {
 		Error() string
