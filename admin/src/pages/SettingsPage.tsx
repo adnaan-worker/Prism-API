@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Card,
   Typography,
   Row,
   Col,
@@ -142,17 +141,11 @@ const RuntimeConfigPanel: React.FC = () => {
       />
 
       {/* 缓存开关 */}
-      <Card
-        size="small"
-        type="inner"
-        title={
-          <Space>
-            <DatabaseOutlined />
-            <span>缓存配置</span>
-          </Space>
-        }
-        style={{ marginBottom: 16 }}
-      >
+      <div className="glass-card p-6 mb-4">
+        <div className="flex items-center gap-2 mb-4 text-lg font-medium text-text-primary">
+          <DatabaseOutlined />
+          <span>缓存配置</span>
+        </div>
         <Row gutter={[24, 16]} align="middle">
           <Col xs={24} sm={12}>
             <div style={{ marginBottom: 8 }}>
@@ -194,20 +187,14 @@ const RuntimeConfigPanel: React.FC = () => {
             />
           </Col>
         </Row>
-      </Card>
+      </div>
 
       {/* 语义缓存 */}
-      <Card
-        size="small"
-        type="inner"
-        title={
-          <Space>
-            <ExperimentOutlined />
-            <span>语义缓存</span>
-          </Space>
-        }
-        style={{ marginBottom: 16 }}
-      >
+      <div className="glass-card p-6 mb-4">
+        <div className="flex items-center gap-2 mb-4 text-lg font-medium text-text-primary">
+          <ExperimentOutlined />
+          <span>语义缓存</span>
+        </div>
         <Row gutter={[24, 16]} align="middle">
           <Col xs={24} sm={12}>
             <div style={{ marginBottom: 8 }}>
@@ -266,20 +253,14 @@ const RuntimeConfigPanel: React.FC = () => {
             </Row>
           </Col>
         </Row>
-      </Card>
+      </div>
 
       {/* Embedding 服务 */}
-      <Card
-        size="small"
-        type="inner"
-        title={
-          <Space>
-            <ApiOutlined />
-            <span>Embedding 服务</span>
-          </Space>
-        }
-        style={{ marginBottom: 24 }}
-      >
+      <div className="glass-card p-6 mb-6">
+        <div className="flex items-center gap-2 mb-4 text-lg font-medium text-text-primary">
+          <ApiOutlined />
+          <span>Embedding 服务</span>
+        </div>
         <Row gutter={[24, 16]} align="middle">
           <Col xs={24} sm={12}>
             <div>
@@ -298,7 +279,7 @@ const RuntimeConfigPanel: React.FC = () => {
             />
           </Col>
         </Row>
-      </Card>
+      </div>
 
       {/* 保存按钮 */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
@@ -406,15 +387,11 @@ const OperationsPanel: React.FC = () => {
   return (
     <div>
       {/* 当前运行配置 */}
-      <Card
-        title={
-          <Space>
-            <CloudServerOutlined />
-            <span>当前运行配置</span>
-          </Space>
-        }
-        style={{ marginBottom: 24 }}
-      >
+      <div className="glass-card p-6 mb-6">
+        <div className="flex items-center gap-2 mb-4 text-lg font-medium text-text-primary">
+          <CloudServerOutlined />
+          <span>当前运行配置</span>
+        </div>
         {sysLoading ? (
           <Skeleton active paragraph={{ rows: 4 }} />
         ) : sysError ? (
@@ -458,23 +435,19 @@ const OperationsPanel: React.FC = () => {
             </Descriptions.Item>
           </Descriptions>
         ) : null}
-      </Card>
+      </div>
 
       {/* 缓存统计 */}
-      <Card
-        title={
-          <Space>
+      <div className="glass-card p-6 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2 text-lg font-medium text-text-primary">
             <DatabaseOutlined />
             <span>缓存统计</span>
-          </Space>
-        }
-        extra={
+          </div>
           <Button icon={<ReloadOutlined />} onClick={() => refetchCache()} size="small">
             刷新
           </Button>
-        }
-        style={{ marginBottom: 24 }}
-      >
+        </div>
         {cacheLoading ? (
           <Skeleton active paragraph={{ rows: 2 }} />
         ) : cacheError ? (
@@ -517,20 +490,18 @@ const OperationsPanel: React.FC = () => {
             </Col>
           </Row>
         )}
-      </Card>
+      </div>
 
       {/* 缓存操作 */}
-      <Card
-        title={
-          <Space>
-            <SettingOutlined />
-            <span>缓存操作</span>
-          </Space>
-        }
-      >
+      <div className="glass-card p-6">
+        <div className="flex items-center gap-2 mb-4 text-lg font-medium text-text-primary">
+          <SettingOutlined />
+          <span>缓存操作</span>
+        </div>
         <Row gutter={[16, 16]}>
           <Col xs={24} md={12}>
-            <Card size="small" type="inner" title="清理过期缓存">
+            <div className="bg-page-subtle rounded-lg p-4 border border-border/50 h-full">
+              <div className="font-medium mb-2 text-text-primary">清理过期缓存</div>
               <Paragraph type="secondary" style={{ marginBottom: 16 }}>
                 清理所有已过期的缓存条目，释放存储空间。
               </Paragraph>
@@ -542,10 +513,11 @@ const OperationsPanel: React.FC = () => {
               >
                 清理过期缓存
               </Button>
-            </Card>
+            </div>
           </Col>
           <Col xs={24} md={12}>
-            <Card size="small" type="inner" title="清除用户缓存">
+            <div className="bg-page-subtle rounded-lg p-4 border border-border/50 h-full">
+              <div className="font-medium mb-2 text-text-primary">清除用户缓存</div>
               <Paragraph type="secondary" style={{ marginBottom: 16 }}>
                 清除指定用户的所有缓存数据。
               </Paragraph>
@@ -567,10 +539,10 @@ const OperationsPanel: React.FC = () => {
                   清除缓存
                 </Button>
               </Space.Compact>
-            </Card>
+            </div>
           </Col>
         </Row>
-      </Card>
+      </div>
     </div>
   );
 };
@@ -674,15 +646,11 @@ const SecurityPanel: React.FC = () => {
       )}
 
       {/* 修改管理员密码 */}
-      <Card
-        title={
-          <Space>
-            <LockOutlined />
-            <span>修改管理员密码</span>
-          </Space>
-        }
-        style={{ marginBottom: 24 }}
-      >
+      <div className="glass-card p-6 mb-6">
+        <div className="flex items-center gap-2 mb-4 text-lg font-medium text-text-primary">
+          <LockOutlined />
+          <span>修改管理员密码</span>
+        </div>
         <Form
           form={passwordForm}
           layout="vertical"
@@ -738,18 +706,14 @@ const SecurityPanel: React.FC = () => {
             </Button>
           </Form.Item>
         </Form>
-      </Card>
+      </div>
 
       {/* 默认用户配额 */}
-      <Card
-        title={
-          <Space>
-            <UserOutlined />
-            <span>默认用户配额</span>
-          </Space>
-        }
-        style={{ marginBottom: 24 }}
-      >
+      <div className="glass-card p-6 mb-6">
+        <div className="flex items-center gap-2 mb-4 text-lg font-medium text-text-primary">
+          <UserOutlined />
+          <span>默认用户配额</span>
+        </div>
         <Paragraph type="secondary" style={{ marginBottom: 16 }}>
           新注册用户的默认配额（credits）。修改后仅对新用户生效，不影响已有用户。
         </Paragraph>
@@ -783,17 +747,14 @@ const SecurityPanel: React.FC = () => {
             </Button>
           </Form.Item>
         </Form>
-      </Card>
+      </div>
 
       {/* 默认速率限制 */}
-      <Card
-        title={
-          <Space>
-            <DashboardOutlined />
-            <span>默认速率限制</span>
-          </Space>
-        }
-      >
+      <div className="glass-card p-6">
+        <div className="flex items-center gap-2 mb-4 text-lg font-medium text-text-primary">
+          <DashboardOutlined />
+          <span>默认速率限制</span>
+        </div>
         <Paragraph type="secondary" style={{ marginBottom: 16 }}>
           新注册用户的默认 API 请求频率限制。修改后仅对新用户生效。
         </Paragraph>
@@ -838,7 +799,7 @@ const SecurityPanel: React.FC = () => {
             </Button>
           </Form.Item>
         </Form>
-      </Card>
+      </div>
     </div>
   );
 };

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Form, Input, Button, Card, Typography, message } from 'antd';
+import { Form, Input, Button, Typography, message } from 'antd';
 import { UserOutlined, LockOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../services/authService';
@@ -31,41 +31,28 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <div
-      className="login-bg"
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 24,
-      }}
-    >
-      <Card
-        style={{
-          width: 420,
-          borderRadius: 12,
-          boxShadow: '0 8px 40px rgba(0, 0, 0, 0.12)',
-          border: 'none',
-        }}
-        styles={{ body: { padding: '40px 32px 32px' } }}
-      >
+    <div className="min-h-screen bg-page flex flex-col items-center justify-center p-4 relative overflow-hidden">
+      {/* Background Gradients */}
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary-500/20 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-500/20 rounded-full blur-[120px] pointer-events-none" />
+
+      <div className="glass-card w-full max-w-md p-8 sm:p-10 relative z-10">
         {/* Logo & Title */}
-        <div style={{ textAlign: 'center', marginBottom: 36 }}>
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+        <div className="text-center mb-8">
+          <div className="flex justify-center mb-4">
             <img
               src="/logo.svg"
               alt="Prism API"
-              style={{ width: 48, height: 48 }}
+              className="w-12 h-12"
               onError={(e) => {
                 (e.target as HTMLImageElement).style.display = 'none';
               }}
             />
           </div>
-          <Title level={3} style={{ marginBottom: 4, fontWeight: 600 }}>
+          <Title level={3} className="!mb-1 !font-semibold !text-text-primary">
             Prism API
           </Title>
-          <Text type="secondary" style={{ fontSize: 14 }}>
+          <Text className="text-text-secondary text-sm">
             管理后台
           </Text>
         </div>
@@ -76,6 +63,7 @@ const LoginPage: React.FC = () => {
           onFinish={onFinish}
           autoComplete="off"
           size="large"
+          layout="vertical"
           initialValues={{ remember: true }}
         >
           <Form.Item
@@ -83,8 +71,9 @@ const LoginPage: React.FC = () => {
             rules={[{ required: true, message: '请输入用户名' }]}
           >
             <Input
-              prefix={<UserOutlined style={{ color: 'rgba(0,0,0,0.25)' }} />}
+              prefix={<UserOutlined className="text-text-tertiary" />}
               placeholder="用户名"
+              className="!bg-page-subtle !border-border !text-text-primary hover:!border-primary focus:!border-primary"
               autoFocus
             />
           </Form.Item>
@@ -92,33 +81,35 @@ const LoginPage: React.FC = () => {
           <Form.Item
             name="password"
             rules={[{ required: true, message: '请输入密码' }]}
+            className="mb-8"
           >
             <Input.Password
-              prefix={<LockOutlined style={{ color: 'rgba(0,0,0,0.25)' }} />}
+              prefix={<LockOutlined className="text-text-tertiary" />}
               placeholder="密码"
+              className="!bg-page-subtle !border-border !text-text-primary hover:!border-primary focus:!border-primary"
             />
           </Form.Item>
 
-          <Form.Item style={{ marginBottom: 16 }}>
+          <Form.Item className="mb-0">
             <Button
               type="primary"
               htmlType="submit"
               loading={loading}
               block
-              style={{ height: 44, fontWeight: 500 }}
+              className="!h-11 !font-medium !text-base shadow-lg shadow-primary/20 hover:!shadow-primary/40 transition-all duration-300"
             >
               登 录
             </Button>
           </Form.Item>
         </Form>
+      </div>
 
-        {/* Footer */}
-        <div style={{ textAlign: 'center' }}>
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            仅限授权管理员访问 &middot; v1.0.0
-          </Text>
-        </div>
-      </Card>
+      {/* Footer */}
+      <div className="mt-8 text-center relative z-10">
+        <Text className="text-text-tertiary text-xs">
+          仅限授权管理员访问 &middot; v1.0.0
+        </Text>
+      </div>
     </div>
   );
 };

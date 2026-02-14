@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  Card,
   Table,
   Button,
   Input,
@@ -251,26 +250,28 @@ const UsersPage: React.FC = () => {
 
   return (
     <PageContainer title="用户管理" description="管理平台用户、配额和权限">
-      <Card>
+      <div className="glass-card p-6">
         {/* 搜索和筛选栏 */}
-        <Space style={{ marginBottom: 16 }} wrap>
-          <Search
-            placeholder="搜索用户名或邮箱"
-            allowClear
-            style={{ width: 300 }}
-            onSearch={handleSearch}
-          />
-          <Select
-            placeholder="筛选状态"
-            allowClear
-            style={{ width: 150 }}
-            onChange={handleStatusFilter}
-          >
-            <Option value="active">正常</Option>
-            <Option value="disabled">禁用</Option>
-          </Select>
+        <div className="mb-4 flex flex-wrap gap-4 items-center justify-between">
+          <Space wrap>
+            <Search
+              placeholder="搜索用户名或邮箱"
+              allowClear
+              className="w-full sm:w-72"
+              onSearch={handleSearch}
+            />
+            <Select
+              placeholder="筛选状态"
+              allowClear
+              className="w-36"
+              onChange={handleStatusFilter}
+            >
+              <Option value="active">正常</Option>
+              <Option value="disabled">禁用</Option>
+            </Select>
+          </Space>
           <TableToolbar showAdd={false} onRefresh={() => refetch()} />
-        </Space>
+        </div>
 
         {/* 用户列表表格 */}
         <Table
@@ -288,8 +289,9 @@ const UsersPage: React.FC = () => {
             showTotal: (total) => `共 ${total} 条记录`,
             onChange: handlePageChange,
           }}
+          size="middle"
         />
-      </Card>
+      </div>
 
       {/* 用户详情抽屉 */}
       <Drawer

@@ -24,19 +24,12 @@ const PageContainer: React.FC<PageContainerProps> = ({
   return (
     <div>
       {/* 页面头部 */}
-      <div
-        className="page-header"
-        style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          justifyContent: 'space-between',
-        }}
-      >
+      <div className="mb-6 flex items-start justify-between">
         <div>
-          <div className="page-title">{title}</div>
-          {description && <div className="page-desc">{description}</div>}
+          <h1 className="text-2xl font-bold text-text-primary">{title}</h1>
+          {description && <div className="text-text-secondary mt-1">{description}</div>}
         </div>
-        {extra && <div style={{ flexShrink: 0, marginLeft: 24 }}>{extra}</div>}
+        {extra && <div className="ml-6 flex-shrink-0">{extra}</div>}
       </div>
 
       {/* 页面内容 */}

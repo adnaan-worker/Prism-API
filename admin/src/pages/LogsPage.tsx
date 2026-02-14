@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Card,
   Table,
   Space,
   Tag,
@@ -222,7 +221,7 @@ const LogsPage: React.FC = () => {
 
   return (
     <PageContainer title="请求日志" description="查看和分析 API 请求记录">
-      <Card>
+      <div className="glass-card p-6">
         {/* 筛选栏 */}
         <Space style={{ marginBottom: 16 }} wrap>
           <RangePicker
@@ -311,7 +310,7 @@ const LogsPage: React.FC = () => {
             },
           }}
         />
-      </Card>
+      </div>
 
       {/* 日志详情抽屉 */}
       <Drawer

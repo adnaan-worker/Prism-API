@@ -107,27 +107,27 @@ export interface AccountCredential {
   account_email?: string;
   weight: number;
   is_active: boolean;
-  
+
   // 账号状态
   status: string; // active, expired, error, refreshing, unknown
   last_error?: string;
-  
+
   // 健康状态
   health_status: string;
   last_checked_at?: string;
   last_used_at?: string;
-  
+
   // 统计
   total_requests: number;
   total_errors: number;
   error_rate: number;
-  
+
   // 订阅信息
   subscription_type?: string; // Free, Pro, Pro_Plus, Enterprise
   subscription_title?: string;
   subscription_expires_at?: string;
   subscription_days_remaining?: number;
-  
+
   // 使用量详情
   usage_current: number;
   usage_limit: number;
@@ -139,19 +139,22 @@ export interface AccountCredential {
   free_trial_current: number;
   free_trial_expiry?: string;
   next_reset_date?: string;
-  
+
   // 机器码
   machine_id?: string;
-  
+
   // OAuth 相关
   expires_at?: string;
   is_expired: boolean;
-  
+
   // 速率限制
   rate_limit: number;
   current_usage: number;
-  
-  // 敏感字段不在响应中返回
+
+  // 兼容字段
+  name?: string;
+  credentials_data?: any;
+  request_count?: number;
 }
 
 export interface CreateCredentialRequest {

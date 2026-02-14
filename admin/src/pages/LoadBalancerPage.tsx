@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Card,
   Row,
   Col,
   Select,
@@ -25,7 +24,7 @@ import {
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { loadBalancerService } from '../services/loadBalancerService';
-import type { ModelEndpoint, LoadBalancerConfig } from '../services/loadBalancerService';
+import type { ModelEndpoint } from '../services/loadBalancerService';
 import type { ColumnsType } from 'antd/es/table';
 import PageContainer from '../components/PageContainer';
 
@@ -228,19 +227,19 @@ const LoadBalancerPage: React.FC = () => {
     avgResponseTime:
       endpoints && endpoints.length > 0
         ? Math.round(
-            endpoints.reduce((sum, e) => sum + (e.response_time || 0), 0) /
-              endpoints.length
-          )
+          endpoints.reduce((sum, e) => sum + (e.response_time || 0), 0) /
+          endpoints.length
+        )
         : 0,
   };
 
   return (
     <PageContainer title="负载均衡" description="管理模型端点分配和均衡策略">
       {/* 模型选择和配置 */}
-      <Card style={{ marginBottom: 16 }}>
-        <Space size="large" wrap>
+      <div className="glass-card p-6 mb-6">
+        <Space size="large" wrap className="w-full justify-between">
           <div>
-            <div style={{ marginBottom: 8, fontWeight: 500 }}>选择模型</div>
+            <div className="mb-2 font-medium text-text-primary">选择模型</div>
             <Select
               style={{ width: 300 }}
               placeholder="选择要配置的模型"
@@ -248,7 +247,7 @@ const LoadBalancerPage: React.FC = () => {
               onChange={setSelectedModel}
               showSearch
               filterOption={(input, option) =>
-                (option?.children as string)
+                String(option?.children)
                   .toLowerCase()
                   .includes(input.toLowerCase())
               }
@@ -262,11 +261,11 @@ const LoadBalancerPage: React.FC = () => {
           </div>
 
           {selectedModel && (
-            <>
+            <div className="flex items-end gap-4">
               <div>
-                <div style={{ marginBottom: 8, fontWeight: 500 }}>负载均衡策略</div>
+                <div className="mb-2 font-medium text-text-primary">负载均衡策略</div>
                 <Space>
-                  <Tag color="blue">
+                  <Tag color="blue" className="mr-0">
                     {strategyOptions.find((s) => s.value === currentConfig?.strategy)
                       ?.label || '未配置'}
                   </Tag>
@@ -285,75 +284,79 @@ const LoadBalancerPage: React.FC = () => {
               >
                 刷新状态
               </Button>
-            </>
+            </div>
           )}
         </Space>
-      </Card>
+      </div >
 
       {/* 统计卡片 */}
-      {selectedModel && (
-        <Row gutter={16} style={{ marginBottom: 16 }}>
-          <Col xs={24} sm={12} lg={6}>
-            <Card>
-              <Statistic
-                title="总端点数"
-                value={stats.total}
-                valueStyle={{ color: '#1890ff' }}
-              />
-            </Card>
-          </Col>
-          <Col xs={24} sm={12} lg={6}>
-            <Card>
-              <Statistic
-                title="健康端点"
-                value={stats.healthy}
-                suffix={`/ ${stats.total}`}
-                valueStyle={{ color: '#52c41a' }}
-              />
-            </Card>
-          </Col>
-          <Col xs={24} sm={12} lg={6}>
-            <Card>
-              <Statistic
-                title="启用端点"
-                value={stats.active}
-                suffix={`/ ${stats.total}`}
-                valueStyle={{ color: '#722ed1' }}
-              />
-            </Card>
-          </Col>
-          <Col xs={24} sm={12} lg={6}>
-            <Card>
-              <Statistic
-                title="平均响应时间"
-                value={stats.avgResponseTime}
-                suffix="ms"
-                valueStyle={{ color: '#fa8c16' }}
-              />
-            </Card>
-          </Col>
-        </Row>
-      )}
+      {
+        selectedModel && (
+          <Row gutter={[16, 16]} className="mb-6">
+            <Col xs={24} sm={12} lg={6}>
+              <div className="glass-card p-6">
+                <Statistic
+                  title={<span className="text-text-secondary">总端点数</span>}
+                  value={stats.total}
+                  valueStyle={{ color: '#38bdf8', fontWeight: 600 }}
+                />
+              </div>
+            </Col>
+            <Col xs={24} sm={12} lg={6}>
+              <div className="glass-card p-6">
+                <Statistic
+                  title={<span className="text-text-secondary">健康端点</span>}
+                  value={stats.healthy}
+                  suffix={<span className="text-text-tertiary text-sm">/ {stats.total}</span>}
+                  valueStyle={{ color: '#4ade80', fontWeight: 600 }}
+                />
+              </div>
+            </Col>
+            <Col xs={24} sm={12} lg={6}>
+              <div className="glass-card p-6">
+                <Statistic
+                  title={<span className="text-text-secondary">启用端点</span>}
+                  value={stats.active}
+                  suffix={<span className="text-text-tertiary text-sm">/ {stats.total}</span>}
+                  valueStyle={{ color: '#a78bfa', fontWeight: 600 }}
+                />
+              </div>
+            </Col>
+            <Col xs={24} sm={12} lg={6}>
+              <div className="glass-card p-6">
+                <Statistic
+                  title={<span className="text-text-secondary">平均响应时间</span>}
+                  value={stats.avgResponseTime}
+                  suffix={<span className="text-sm">ms</span>}
+                  valueStyle={{ color: '#fbbf24', fontWeight: 600 }}
+                />
+              </div>
+            </Col>
+          </Row>
+        )
+      }
 
       {/* 端点列表 */}
-      {selectedModel ? (
-        <Card title={`${selectedModel} 的可用端点`}>
-          <Table
-            columns={endpointColumns}
-            dataSource={endpoints || []}
-            rowKey="config_id"
-            loading={endpointsLoading}
-            pagination={false}
-          />
-        </Card>
-      ) : (
-        <Card>
-          <div style={{ textAlign: 'center', padding: '60px 0', color: '#999' }}>
+      {
+        selectedModel ? (
+          <div className="glass-card p-6">
+            <div className="mb-4 font-bold text-lg text-text-primary">{selectedModel} 的可用端点</div>
+            <Table
+              columns={endpointColumns}
+              dataSource={endpoints || []}
+              rowKey={(record) => `${record.config_id}-${record.base_url}`}
+              loading={endpointsLoading}
+              pagination={false}
+              size="middle"
+            />
+          </div>
+        ) : (
+          <div className="glass-card p-12 text-center text-text-tertiary">
             <SettingOutlined style={{ fontSize: 48, marginBottom: 16 }} />
             <div>请选择一个模型以查看和配置负载均衡</div>
           </div>
-        </Card>
-      )}
+        )
+      }
 
       {/* 配置策略模态框 */}
       <Modal
@@ -398,7 +401,7 @@ const LoadBalancerPage: React.FC = () => {
           </Form.Item>
         </Form>
       </Modal>
-    </PageContainer>
+    </PageContainer >
   );
 };
 

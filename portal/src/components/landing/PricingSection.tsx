@@ -1,7 +1,5 @@
-import { Button, Card, Typography } from 'antd';
+import { Button } from 'antd';
 import { CheckOutlined, StarOutlined, CrownOutlined, RocketOutlined } from '@ant-design/icons';
-
-const { Title, Paragraph } = Typography;
 
 interface PricingPlan {
   name: string;
@@ -76,121 +74,114 @@ const pricingPlans: PricingPlan[] = [
 
 const PricingSection = () => {
   return (
-    <section id="pricing" className="py-20 bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section id="pricing" className="py-24 bg-slate-50 dark:bg-black relative overflow-hidden">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         {/* Section Header */}
         <div className="text-center mb-16">
-          <div className="inline-block px-4 py-2 rounded-full bg-primary-100 text-primary-700 text-sm font-medium mb-4">
+          <div className="inline-block px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
             定价方案
           </div>
-          <Title level={2} className="!text-4xl !font-bold !mb-4">
+          <h2 className="text-4xl font-bold mb-6 text-slate-900 dark:text-white">
             选择适合您的方案
-          </Title>
-          <Paragraph className="text-xl text-gray-600 max-w-2xl mx-auto">
+          </h2>
+          <p className="text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
             灵活的定价，透明的收费，无隐藏费用
-          </Paragraph>
+          </p>
         </div>
 
         {/* Pricing Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
           {pricingPlans.map((plan, index) => (
-            <Card
+            <div
               key={index}
-              className={`relative ${
-                plan.highlighted
-                  ? 'border-2 border-primary-500 shadow-2xl transform md:scale-105'
-                  : 'border border-gray-200'
-              } hover:shadow-xl transition-all duration-300`}
-              bodyStyle={{ padding: '32px' }}
+              className={`relative glass-card p-8 rounded-2xl transition-all duration-300 ${plan.highlighted
+                ? 'border-2 border-primary shadow-2xl shadow-primary/20 transform md:scale-105 z-10'
+                : 'border border-slate-200 dark:border-white/5 hover:border-primary/50 hover:shadow-xl'
+                }`}
             >
               {plan.highlighted && (
                 <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                  <div className="bg-gradient-to-r from-primary-500 to-purple-500 text-white px-4 py-1 rounded-full text-sm font-semibold">
+                  <div className="bg-gradient-to-r from-primary to-purple-600 text-white px-4 py-1 rounded-full text-sm font-semibold shadow-lg">
                     最受欢迎
                   </div>
                 </div>
               )}
 
-              <div className="text-center mb-6">
-                <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full mb-4 ${
-                  plan.highlighted ? 'bg-primary-100 text-primary-600' : 'bg-gray-100 text-gray-600'
-                }`}>
+              <div className="text-center mb-8">
+                <div className={`inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-6 ${plan.highlighted ? 'bg-primary/10 text-primary' : 'bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400'
+                  }`}>
                   {plan.icon}
                 </div>
-                <Title level={3} className="!mb-2">
+                <h3 className="text-2xl font-bold mb-2 text-slate-900 dark:text-white">
                   {plan.name}
-                </Title>
-                <Paragraph className="text-gray-600 !mb-4">
+                </h3>
+                <p className="text-slate-500 dark:text-slate-400 mb-6 h-10">
                   {plan.description}
-                </Paragraph>
-                <div className="mb-2">
-                  <span className="text-5xl font-bold text-gray-900">{plan.price}</span>
+                </p>
+                <div className="flex items-baseline justify-center">
+                  <span className="text-5xl font-bold text-slate-900 dark:text-white tracking-tight">{plan.price}</span>
                   {plan.period !== '联系我们' && (
-                    <span className="text-gray-600 ml-2">{plan.period}</span>
+                    <span className="text-slate-500 dark:text-slate-400 ml-2">{plan.period}</span>
                   )}
                 </div>
                 {plan.period === '联系我们' && (
-                  <div className="text-gray-600">{plan.period}</div>
+                  <div className="text-slate-500 dark:text-slate-400 ml-2 opacity-0 h-0">{plan.period}</div>
                 )}
               </div>
 
-              <div className="mb-8">
-                <ul className="space-y-3">
-                  {plan.features.map((feature, featureIndex) => (
-                    <li key={featureIndex} className="flex items-start">
-                      <CheckOutlined className={`${
-                        plan.highlighted ? 'text-primary-600' : 'text-green-600'
+              <div className="mb-8 space-y-4">
+                {plan.features.map((feature, featureIndex) => (
+                  <div key={featureIndex} className="flex items-start">
+                    <CheckOutlined className={`${plan.highlighted ? 'text-primary' : 'text-green-500'
                       } mt-1 mr-3 flex-shrink-0`} />
-                      <span className="text-gray-700">{feature}</span>
-                    </li>
-                  ))}
-                </ul>
+                    <span className="text-slate-700 dark:text-slate-300">{feature}</span>
+                  </div>
+                ))}
               </div>
 
               <Button
                 type={plan.buttonType}
                 size="large"
                 block
-                className={`!h-12 !font-semibold ${
-                  plan.highlighted ? 'shadow-lg hover:shadow-xl' : ''
-                }`}
+                className={`!h-12 !font-semibold !rounded-xl ${plan.highlighted
+                  ? 'bg-primary hover:bg-primary-600 border-none shadow-lg shadow-primary/20 text-white'
+                  : 'bg-white dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-900 dark:text-white hover:border-primary hover:text-primary'
+                  }`}
               >
                 {plan.buttonText}
               </Button>
-            </Card>
+            </div>
           ))}
         </div>
 
         {/* Additional Info */}
-        <div className="mt-16 text-center">
-          <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-0 max-w-4xl mx-auto">
-            <div className="py-6">
-              <Title level={4} className="!mb-3">
-                需要更多信息？
-              </Title>
-              <Paragraph className="text-gray-600 !mb-4">
-                我们的销售团队随时为您提供帮助，解答您的任何问题
-              </Paragraph>
-              <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Button size="large" href="/contact">
-                  联系销售
-                </Button>
-                <Button size="large" href="/docs/pricing">
-                  查看详细定价
-                </Button>
-              </div>
+        <div className="mt-20 text-center">
+          <div className="glass-card p-10 rounded-3xl bg-gradient-to-r from-blue-500/5 to-indigo-500/5 border border-blue-200 dark:border-blue-500/10 max-w-4xl mx-auto">
+            <h3 className="text-2xl font-bold mb-4 text-slate-900 dark:text-white">
+              需要更多信息？
+            </h3>
+            <p className="text-lg text-slate-600 dark:text-slate-400 mb-8">
+              我们的销售团队随时为您提供帮助，解答您的任何问题
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Button size="large" className="!h-12 !px-8 !rounded-xl" href="/contact">
+                联系销售
+              </Button>
+              <Button type="primary" size="large" className="!h-12 !px-8 !rounded-xl" href="/docs/pricing">
+                查看详细定价
+              </Button>
             </div>
-          </Card>
+          </div>
         </div>
 
         {/* FAQ Teaser */}
-        <div className="mt-12 text-center">
-          <Paragraph className="text-gray-600">
+        <div className="mt-16 text-center">
+          <p className="text-slate-500 dark:text-slate-400">
             常见问题？查看我们的{' '}
-            <a href="/faq" className="text-primary-600 hover:text-primary-700 font-semibold">
+            <a href="/faq" className="text-primary hover:text-primary-600 font-semibold transition-colors">
               FAQ页面
             </a>
-          </Paragraph>
+          </p>
         </div>
       </div>
     </section>

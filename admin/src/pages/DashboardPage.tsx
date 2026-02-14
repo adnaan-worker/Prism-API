@@ -1,5 +1,5 @@
 import React from 'react';
-import { Card, Row, Col, Statistic, Table, Skeleton, Empty } from 'antd';
+import { Row, Col, Table, Skeleton, Empty } from 'antd';
 import {
   UserOutlined,
   TeamOutlined,
@@ -8,33 +8,33 @@ import {
 } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import ReactECharts from 'echarts-for-react';
-import { statsService } from '../services/statsService';
+import { statsService, type StatsOverview, type RequestTrend, type ModelUsage } from '../services/statsService';
 import type { EChartsOption } from 'echarts';
 import { formatNumber } from '../utils/format';
 
 // 统计卡片颜色配置
 const statCards = [
-  { key: 'total_users', title: '总用户数', icon: <UserOutlined />, color: '#1677ff', bg: '#e6f4ff' },
-  { key: 'active_users', title: '活跃用户', icon: <TeamOutlined />, color: '#52c41a', bg: '#f6ffed' },
-  { key: 'total_requests', title: '总请求数', icon: <ApiOutlined />, color: '#722ed1', bg: '#f9f0ff' },
-  { key: 'today_requests', title: '今日请求', icon: <RiseOutlined />, color: '#fa8c16', bg: '#fff7e6' },
+  { key: 'total_users', title: '总用户数', icon: <UserOutlined />, color: '#38bdf8', bg: 'rgba(56, 189, 248, 0.1)' },
+  { key: 'active_users', title: '活跃用户', icon: <TeamOutlined />, color: '#4ade80', bg: 'rgba(74, 222, 128, 0.1)' },
+  { key: 'total_requests', title: '总请求数', icon: <ApiOutlined />, color: '#a78bfa', bg: 'rgba(167, 139, 250, 0.1)' },
+  { key: 'today_requests', title: '今日请求', icon: <RiseOutlined />, color: '#fbbf24', bg: 'rgba(251, 191, 36, 0.1)' },
 ] as const;
 
 const DashboardPage: React.FC = () => {
   // 数据查询
-  const { data: overview, isLoading: overviewLoading } = useQuery({
+  const { data: overview, isLoading: overviewLoading } = useQuery<StatsOverview>({
     queryKey: ['stats', 'overview'],
-    queryFn: statsService.getOverview,
+    queryFn: () => statsService.getOverview(),
   });
 
-  const { data: trendData, isLoading: trendLoading } = useQuery({
+  const { data: trendData, isLoading: trendLoading } = useQuery<RequestTrend[]>({
     queryKey: ['stats', 'trend'],
     queryFn: () => statsService.getRequestTrend(7),
   });
 
-  const { data: modelUsage, isLoading: modelLoading } = useQuery({
+  const { data: modelUsage, isLoading: modelLoading } = useQuery<ModelUsage[]>({
     queryKey: ['stats', 'models'],
-    queryFn: statsService.getModelUsage,
+    queryFn: () => statsService.getModelUsage(),
   });
 
   const { data: recentLogs, isLoading: logsLoading } = useQuery({
@@ -44,64 +44,67 @@ const DashboardPage: React.FC = () => {
 
   // 请求趋势图
   const trendChartOption: EChartsOption = {
-    tooltip: { trigger: 'axis' },
+    backgroundColor: 'transparent',
+    tooltip: { trigger: 'axis', backgroundColor: '#1f1f1f', borderColor: '#333', textStyle: { color: '#fff' } },
     xAxis: {
       type: 'category',
       data: trendData?.map((item) => item.date) || [],
-      axisLine: { lineStyle: { color: '#e5e7eb' } },
-      axisLabel: { color: '#6b7280' },
+      axisLine: { lineStyle: { color: '#333' } },
+      axisLabel: { color: '#a1a1aa' },
     },
     yAxis: {
       type: 'value',
       name: '请求数',
-      splitLine: { lineStyle: { type: 'dashed', color: '#f0f0f0' } },
-      axisLabel: { color: '#6b7280' },
+      nameTextStyle: { color: '#a1a1aa' },
+      splitLine: { lineStyle: { type: 'dashed', color: 'rgba(255,255,255,0.05)' } },
+      axisLabel: { color: '#a1a1aa' },
     },
     series: [
       {
         name: '请求数',
         type: 'line',
         smooth: true,
-        symbol: 'circle',
-        symbolSize: 6,
+        symbol: 'none',
         data: trendData?.map((item) => item.count) || [],
         areaStyle: {
           color: {
             type: 'linear',
             x: 0, y: 0, x2: 0, y2: 1,
             colorStops: [
-              { offset: 0, color: 'rgba(22, 119, 255, 0.15)' },
-              { offset: 1, color: 'rgba(22, 119, 255, 0.01)' },
+              { offset: 0, color: 'rgba(14, 165, 233, 0.3)' },
+              { offset: 1, color: 'rgba(14, 165, 233, 0.01)' },
             ],
           },
         },
-        lineStyle: { width: 2, color: '#1677ff' },
-        itemStyle: { color: '#1677ff' },
+        lineStyle: { width: 3, color: '#0ea5e9' },
+        itemStyle: { color: '#0ea5e9' },
       },
     ],
-    grid: { left: 12, right: 12, bottom: 0, top: 8, containLabel: true },
+    grid: { left: 10, right: 10, bottom: 0, top: 30, containLabel: true },
   };
 
   // 模型使用排行
   const modelChartOption: EChartsOption = {
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    backgroundColor: 'transparent',
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, backgroundColor: '#1f1f1f', borderColor: '#333', textStyle: { color: '#fff' } },
     xAxis: {
       type: 'value',
       name: '调用次数',
-      splitLine: { lineStyle: { type: 'dashed', color: '#f0f0f0' } },
-      axisLabel: { color: '#6b7280' },
+      nameTextStyle: { color: '#a1a1aa' },
+      splitLine: { lineStyle: { type: 'dashed', color: 'rgba(255,255,255,0.05)' } },
+      axisLabel: { color: '#a1a1aa' },
     },
     yAxis: {
       type: 'category',
       data: modelUsage?.map((item) => item.model).reverse() || [],
-      axisLine: { lineStyle: { color: '#e5e7eb' } },
-      axisLabel: { color: '#6b7280', fontSize: 12 },
+      axisLine: { lineStyle: { color: '#333' } },
+      axisLabel: { color: '#a1a1aa', fontSize: 12 },
     },
     series: [
       {
         name: '调用次数',
         type: 'bar',
-        barMaxWidth: 24,
+        barMaxWidth: 20,
         data: modelUsage?.map((item) => item.count).reverse() || [],
         itemStyle: {
           borderRadius: [0, 4, 4, 0],
@@ -109,14 +112,14 @@ const DashboardPage: React.FC = () => {
             type: 'linear',
             x: 0, y: 0, x2: 1, y2: 0,
             colorStops: [
-              { offset: 0, color: '#1677ff' },
-              { offset: 1, color: '#69b1ff' },
+              { offset: 0, color: '#0ea5e9' },
+              { offset: 1, color: '#6366f1' },
             ],
           },
         },
       },
     ],
-    grid: { left: 12, right: 24, bottom: 0, top: 8, containLabel: true },
+    grid: { left: 10, right: 30, bottom: 0, top: 30, containLabel: true },
   };
 
   // 最近活动表格
@@ -128,9 +131,12 @@ const DashboardPage: React.FC = () => {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      width: 80,
+      width: 100,
       render: (status: string) => (
-        <span style={{ color: status === '成功' ? '#52c41a' : '#ff4d4f', fontWeight: 500 }}>
+        <span className={`px-2 py-1 rounded-md text-xs font-medium ${status === '成功'
+          ? 'bg-green-500/10 text-green-400 border border-green-500/20'
+          : 'bg-red-500/10 text-red-400 border border-red-500/20'
+          }`}>
           {status}
         </span>
       ),
@@ -147,100 +153,84 @@ const DashboardPage: React.FC = () => {
     })) || [];
 
   return (
-    <div>
+    <div className="space-y-6">
       {/* 页面头部 */}
-      <div className="page-header">
-        <div className="page-title">统计概览</div>
-        <div className="page-desc">查看系统运行状态和关键指标</div>
+      <div>
+        <h1 className="text-2xl font-bold text-text-primary">统计概览</h1>
+        <p className="text-text-secondary mt-1">查看系统运行状态和关键指标</p>
       </div>
 
       {/* 统计卡片 */}
       <Row gutter={[16, 16]}>
         {statCards.map((item) => (
           <Col xs={24} sm={12} lg={6} key={item.key}>
-            <Card className="stat-card" styles={{ body: { padding: '20px 24px' } }}>
+            <div className="glass-card p-6 h-full border-l-4" style={{ borderLeftColor: item.color }}>
               {overviewLoading ? (
                 <Skeleton active paragraph={{ rows: 1 }} title={false} />
               ) : (
-                <Statistic
-                  title={<span style={{ color: 'rgba(0,0,0,0.45)', fontSize: 14 }}>{item.title}</span>}
-                  value={item.key === 'total_requests' || item.key === 'today_requests'
-                    ? formatNumber((overview as any)?.[item.key] || 0)
-                    : (overview as any)?.[item.key] || 0
-                  }
-                  prefix={
-                    <span
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        width: 40,
-                        height: 40,
-                        borderRadius: 8,
-                        background: item.bg,
-                        color: item.color,
-                        fontSize: 18,
-                        marginRight: 12,
-                      }}
-                    >
-                      {item.icon}
-                    </span>
-                  }
-                  valueStyle={{ color: 'rgba(0,0,0,0.88)', fontSize: 28, fontWeight: 600 }}
-                />
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="text-text-secondary text-sm mb-1">{item.title}</div>
+                    <div className="text-2xl font-bold text-text-primary">
+                      {item.key === 'total_requests' || item.key === 'today_requests'
+                        ? formatNumber((overview as any)?.[item.key] || 0)
+                        : (overview as any)?.[item.key] || 0
+                      }
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-center w-10 h-10 rounded-lg" style={{ backgroundColor: item.bg, color: item.color }}>
+                    <div className="text-lg">{item.icon}</div>
+                  </div>
+                </div>
               )}
-            </Card>
+            </div>
           </Col>
         ))}
       </Row>
 
       {/* 图表 */}
-      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+      <Row gutter={[16, 16]}>
         <Col xs={24} lg={12}>
-          <Card
-            title="请求趋势"
-            styles={{ header: { borderBottom: '1px solid #f0f0f0' }, body: { padding: '12px 16px' } }}
-          >
+          <div className="glass-card p-6 h-full">
+            <h3 className="text-lg font-semibold text-text-primary mb-4">请求趋势</h3>
             {trendLoading ? (
               <Skeleton active paragraph={{ rows: 6 }} title={false} />
             ) : trendData?.length ? (
               <ReactECharts option={trendChartOption} style={{ height: 320 }} />
             ) : (
-              <Empty description="暂无数据" style={{ padding: '60px 0' }} />
+              <Empty description={<span className="text-text-secondary">暂无数据</span>} style={{ padding: '60px 0' }} />
             )}
-          </Card>
+          </div>
         </Col>
         <Col xs={24} lg={12}>
-          <Card
-            title="模型使用排行"
-            styles={{ header: { borderBottom: '1px solid #f0f0f0' }, body: { padding: '12px 16px' } }}
-          >
+          <div className="glass-card p-6 h-full">
+            <h3 className="text-lg font-semibold text-text-primary mb-4">模型使用排行</h3>
             {modelLoading ? (
               <Skeleton active paragraph={{ rows: 6 }} title={false} />
             ) : modelUsage?.length ? (
               <ReactECharts option={modelChartOption} style={{ height: 320 }} />
             ) : (
-              <Empty description="暂无数据" style={{ padding: '60px 0' }} />
+              <Empty description={<span className="text-text-secondary">暂无数据</span>} style={{ padding: '60px 0' }} />
             )}
-          </Card>
+          </div>
         </Col>
       </Row>
 
       {/* 最近活动 */}
-      <Card
-        title="最近活动"
-        style={{ marginTop: 16 }}
-        styles={{ header: { borderBottom: '1px solid #f0f0f0' } }}
-      >
+      <div className="glass-card overflow-hidden">
+        <div className="p-6 border-b border-white/5">
+          <h3 className="text-lg font-semibold text-text-primary">最近活动</h3>
+        </div>
         <Table
           columns={activityColumns}
           dataSource={activityData}
           pagination={false}
           loading={logsLoading}
+          rowClassName="hover:bg-white/5 transition-colors"
           size="middle"
-          locale={{ emptyText: <Empty description="暂无活动记录" /> }}
+          locale={{ emptyText: <Empty description={<span className="text-text-secondary">暂无活动记录</span>} /> }}
         />
-      </Card>
+      </div>
     </div>
   );
 };

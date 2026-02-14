@@ -1,0 +1,95 @@
+{
+    "menu": {
+        "dashboard": "Dashboard",
+        "apiKeys": "API Keys",
+        "models": "Models",
+        "docs": "Documentation",
+        "profile": "Profile",
+        "menu": "Menu",
+        "logout": "Logout"
+    },
+    "dashboard": {
+        "welcome": "Welcome Back",
+        "welcomeSub": "Here's what's happening with your API usage today.",
+        "upgrade": "Upgrade Plan",
+        "quota": {
+            "total": "Total Quota",
+            "used": "Used Quota",
+            "remaining": "Remaining",
+            "lifetime": "Lifetime Accumulated",
+            "consumed": "% Consumed",
+            "available": "Available to Use"
+        },
+        "status": {
+            "title": "System Status",
+            "operational": "Operational",
+            "degraded": "Degraded",
+            "maintenance": "Maintenance"
+        },
+        "trends": {
+            "title": "Usage Trends",
+            "last7Days": "Last 7 Days",
+            "last30Days": "Last 30 Days"
+        },
+        "quickStart": {
+            "title": "Quick Start",
+            "generateKey": {
+                "title": "Generate API Key",
+                "desc": "Get your token to start building"
+            },
+            "exploreModels": {
+                "title": "Explore Models",
+                "desc": "View available AI models"
+            },
+            "docs": {
+                "title": "Read Documentation",
+                "desc": "Learn how to integrate"
+            }
+        }
+    },
+    "profile": {
+        "title": "Profile",
+        "edit": "Edit Profile",
+        "accountDetails": "Account Details",
+        "userId": "User ID",
+        "joined": "Joined",
+        "lastLogin": "Last Login",
+        "quotaUsage": "Quota Usage",
+        "quota": {
+            "total": "Total Quota",
+            "used": "Used Quota",
+            "remaining": "Remaining Balance"
+        },
+        "activity": "7-Day Activity",
+        "stats": {
+            "total": "Total (7 Days)",
+            "dailyAvg": "Daily Average",
+            "peak": "Peak Daily"
+        },
+        "settings": {
+            "title": "Account Settings",
+            "changePassword": "Change Password",
+            "notifications": "Notifications",
+            "2fa": "Two-Factor Auth"
+        },
+        "role": {
+            "admin": "Admin",
+            "developer": "Developer",
+            "user": "User"
+        },
+        "status": {
+            "active": "Active",
+            "inactive": "Inactive",
+            "banned": "Banned"
+        }
+    },
+    "common": {
+        "search": "Search...",
+        "loading": "Loading...",
+        "error": "An error occurred",
+        "success": "Success",
+        "copy": "Copy",
+        "copied": "Copied",
+        "tokens": "tokens"
+    }
+}

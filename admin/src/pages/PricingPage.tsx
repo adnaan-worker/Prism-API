@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Card,
   Table,
   Button,
   Space,
@@ -274,7 +273,7 @@ const PricingPage: React.FC = () => {
 
   return (
     <PageContainer title="定价管理" description="配置各模型的计费规则">
-      <Card>
+      <div className="glass-card p-6">
         {/* 操作栏 */}
         <Space style={{ marginBottom: 16 }} wrap>
           <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
@@ -310,7 +309,7 @@ const PricingPage: React.FC = () => {
             showTotal: (total) => `共 ${total} 条记录`,
           }}
         />
-      </Card>
+      </div>
 
       {/* 添加/编辑模态框 */}
       <Modal
@@ -343,9 +342,9 @@ const PricingPage: React.FC = () => {
                   <Space>
                     <Tag color={
                       config.type === 'openai' ? 'blue' :
-                      config.type === 'anthropic' ? 'orange' :
-                      config.type === 'gemini' ? 'green' :
-                      config.type === 'kiro' ? 'purple' : 'default'
+                        config.type === 'anthropic' ? 'orange' :
+                          config.type === 'gemini' ? 'green' :
+                            config.type === 'kiro' ? 'purple' : 'default'
                     }>
                       {config.type.toUpperCase()}
                     </Tag>

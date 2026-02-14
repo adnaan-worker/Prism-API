@@ -6,14 +6,7 @@ const NotFoundPage: React.FC = () => {
   const navigate = useNavigate();
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
+    <div className="min-h-screen bg-page flex items-center justify-center">
       <Result
         status="404"
         title="404"

@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  Card,
   Table,
   Button,
   Space,
@@ -13,15 +12,9 @@ import {
   Popconfirm,
   Switch,
   Tag,
-  Tabs,
   List,
   Badge,
   Tooltip,
-  Descriptions,
-  Statistic,
-  Row,
-  Col,
-  Progress,
 } from 'antd';
 import {
   EditOutlined,
@@ -32,9 +25,6 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   DatabaseOutlined,
-  UserOutlined,
-  SyncOutlined,
-  EyeOutlined,
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiConfigService } from '../services/apiConfigService';
@@ -59,12 +49,12 @@ const ApiConfigsPage: React.FC = () => {
   const [fetchingModels, setFetchingModels] = React.useState(false);
   const [selectedType, setSelectedType] = React.useState<string>('');
   const [currentPoolId, setCurrentPoolId] = React.useState<number | null>(null);
-  
+
   // 账号池管理弹窗
   const [poolManageVisible, setPoolManageVisible] = React.useState(false);
   const [managingPoolId, setManagingPoolId] = React.useState<number | null>(null);
   const [managingConfig, setManagingConfig] = React.useState<APIConfig | null>(null);
-  
+
   // 账号添加/编辑
   const [accountModalVisible, setAccountModalVisible] = React.useState(false);
   const [accountForm] = Form.useForm();
@@ -80,14 +70,14 @@ const ApiConfigsPage: React.FC = () => {
     queryFn: () => accountPoolService.getCredentials({ pool_id: currentPoolId! }),
     enabled: !!currentPoolId && selectedType === 'kiro',
   });
-  
+
   // 获取管理池的账号列表
   const { data: managingPoolAccounts, refetch: refetchManagingAccounts } = useQuery({
     queryKey: ['managing-pool-accounts', managingPoolId],
     queryFn: () => accountPoolService.getCredentials({ pool_id: managingPoolId! }),
     enabled: !!managingPoolId && poolManageVisible,
   });
-  
+
   // 获取管理池的详情
   const { data: managingPoolData } = useQuery({
     queryKey: ['managing-pool', managingPoolId],
@@ -361,7 +351,7 @@ const ApiConfigsPage: React.FC = () => {
       render: (_, record) => {
         // 检查是否是账号池类型
         const isAccountPool = record.config_type === 'account_pool' && record.account_pool_id;
-        
+
         return (
           <Space>
             {isAccountPool && (
@@ -421,14 +411,14 @@ const ApiConfigsPage: React.FC = () => {
   const handleEdit = (config: APIConfig) => {
     configModal.showModal(config);
     setSelectedType(config.type);
-    
+
     // 如果使用账号池，设置 pool_id
     if (config.config_type === 'account_pool' && config.account_pool_id) {
       setCurrentPoolId(config.account_pool_id);
     } else {
       setCurrentPoolId(null);
     }
-    
+
     configModal.form.setFieldsValue({
       ...config,
       models: config.models.join('\n'),
@@ -511,7 +501,7 @@ const ApiConfigsPage: React.FC = () => {
         base_url: baseUrl,
         api_key: apiKey,
       });
-      
+
       if (response.models && response.models.length > 0) {
         configModal.form.setFieldsValue({
           models: response.models.join('\n'),
@@ -531,7 +521,7 @@ const ApiConfigsPage: React.FC = () => {
   const handleSubmit = async () => {
     try {
       const values = await configModal.form.validateFields();
-      
+
       const modelsArray =
         typeof values.models === 'string'
           ? values.models.split('\n').filter((m: string) => m.trim())
@@ -540,12 +530,12 @@ const ApiConfigsPage: React.FC = () => {
       let configType = 'direct';
       let accountPoolId = null;
       let baseUrl = values.base_url;
-      
+
       // 如果是 Kiro 类型，使用账号池
       if (values.type === 'kiro') {
         configType = 'account_pool';
         let poolId = currentPoolId;
-        
+
         if (!poolId) {
           // 创建新的账号池
           const pool = await createPoolMutation.mutateAsync({
@@ -560,7 +550,7 @@ const ApiConfigsPage: React.FC = () => {
           });
           poolId = pool.id;
         }
-        
+
         accountPoolId = poolId;
         baseUrl = ''; // 账号池类型不需要 base_url
       }
@@ -606,7 +596,7 @@ const ApiConfigsPage: React.FC = () => {
 
   return (
     <PageContainer title="API 配置" description="管理 AI 服务提供商的接入配置">
-      <Card>
+      <div className="glass-card p-6">
         {/* 操作栏 */}
         <Space style={{ marginBottom: 16 }} wrap><TableToolbar
           onAdd={handleAdd}
@@ -640,7 +630,7 @@ const ApiConfigsPage: React.FC = () => {
             </Space>
           }
         /></Space>
-        
+
 
         {/* 配置列表表格 */}
         <Table
@@ -660,7 +650,7 @@ const ApiConfigsPage: React.FC = () => {
             onChange: handlePageChange,
           }}
         />
-      </Card>
+      </div>
 
       {/* 添加/编辑模态框 */}
       <Modal
@@ -685,7 +675,7 @@ const ApiConfigsPage: React.FC = () => {
             name="type"
             rules={[{ required: true, message: '请选择类型' }]}
           >
-            <Select 
+            <Select
               placeholder="选择API类型"
               onChange={(value) => {
                 setSelectedType(value);
@@ -714,7 +704,7 @@ const ApiConfigsPage: React.FC = () => {
             <>
               {/* Kiro 账号管理 */}
               <Form.Item label="Kiro 账号管理">
-                <Card size="small">
+                <div className="bg-page-subtle rounded-lg p-4 border border-border/50">
                   <Space direction="vertical" style={{ width: '100%' }}>
                     <Space>
                       <Button
@@ -800,9 +790,9 @@ const ApiConfigsPage: React.FC = () => {
                       )}
                     />
                   </Space>
-                </Card>
+                </div>
               </Form.Item>
-              
+
               <Form.Item
                 label="支持的模型"
                 name="models"
@@ -942,7 +932,7 @@ const ApiConfigsPage: React.FC = () => {
           </Form.Item>
         </Form>
       </Modal>
-      
+
       {/* 账号池管理弹窗 */}
       {managingPoolId && managingConfig && (
         <AccountPoolManager

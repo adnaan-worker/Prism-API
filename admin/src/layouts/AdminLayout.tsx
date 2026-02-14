@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Layout, Menu, Breadcrumb, Avatar, Dropdown, Space, Typography } from 'antd';
+import { Layout, Menu, Breadcrumb, Avatar, Dropdown, Space, Typography, theme as antTheme, Button } from 'antd';
 import {
   DashboardOutlined,
   UserOutlined,
@@ -11,14 +11,15 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   DollarOutlined,
+  BellOutlined,
+  SearchOutlined
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import type { MenuProps } from 'antd';
 
-const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
 
-// 菜单项配置 — 分组结构
+// Menu Configuration
 const menuItems: MenuProps['items'] = [
   {
     key: '/dashboard',
@@ -34,26 +35,10 @@ const menuItems: MenuProps['items'] = [
     type: 'group',
     label: '业务管理',
     children: [
-      {
-        key: '/users',
-        icon: <UserOutlined />,
-        label: '用户管理',
-      },
-      {
-        key: '/api-configs',
-        icon: <ApiOutlined />,
-        label: 'API 配置',
-      },
-      {
-        key: '/load-balancer',
-        icon: <BarChartOutlined />,
-        label: '负载均衡',
-      },
-      {
-        key: '/pricing',
-        icon: <DollarOutlined />,
-        label: '定价管理',
-      },
+      { key: '/users', icon: <UserOutlined />, label: '用户管理' },
+      { key: '/api-configs', icon: <ApiOutlined />, label: 'API 配置' },
+      { key: '/load-balancer', icon: <BarChartOutlined />, label: '负载均衡' },
+      { key: '/pricing', icon: <DollarOutlined />, label: '定价管理' },
     ],
   },
   {
@@ -61,21 +46,12 @@ const menuItems: MenuProps['items'] = [
     type: 'group',
     label: '系统',
     children: [
-      {
-        key: '/logs',
-        icon: <FileTextOutlined />,
-        label: '请求日志',
-      },
-      {
-        key: '/settings',
-        icon: <SettingOutlined />,
-        label: '系统设置',
-      },
+      { key: '/logs', icon: <FileTextOutlined />, label: '请求日志' },
+      { key: '/settings', icon: <SettingOutlined />, label: '系统设置' },
     ],
   },
 ];
 
-// 面包屑映射
 const breadcrumbMap: Record<string, string> = {
   dashboard: '统计概览',
   users: '用户管理',
@@ -90,22 +66,7 @@ const AdminLayout: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-
-  // 用户下拉菜单
-  const userMenuItems: MenuProps['items'] = [
-    {
-      key: 'settings',
-      icon: <SettingOutlined />,
-      label: '系统设置',
-    },
-    { type: 'divider' },
-    {
-      key: 'logout',
-      icon: <LogoutOutlined />,
-      label: '退出登录',
-      danger: true,
-    },
-  ];
+  const { token } = antTheme.useToken();
 
   const handleMenuClick = ({ key }: { key: string }) => {
     navigate(key);
@@ -120,174 +81,127 @@ const AdminLayout: React.FC = () => {
     }
   };
 
-  // 面包屑 — 使用 items API（非废弃的 Breadcrumb.Item）
+  const userMenuItems: MenuProps['items'] = [
+    { key: 'settings', icon: <SettingOutlined />, label: '系统设置' },
+    { type: 'divider' },
+    { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', danger: true },
+  ];
+
   const getBreadcrumbItems = () => {
     const segments = location.pathname.split('/').filter(Boolean);
     const items = [{ title: '首页', href: '/dashboard', onClick: (e: React.MouseEvent) => { e.preventDefault(); navigate('/dashboard'); } }];
-
     segments.forEach((seg) => {
       const name = breadcrumbMap[seg];
-      if (name) {
-        items.push({ title: name, href: '', onClick: undefined as any });
-      }
+      if (name) items.push({ title: name, href: '', onClick: undefined as any });
     });
-
     return items;
   };
 
-  const siderWidth = collapsed ? 80 : 220;
-
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      {/* 侧边栏 */}
-      <Sider
-        collapsible
-        collapsed={collapsed}
-        onCollapse={setCollapsed}
-        trigger={null}
-        width={220}
-        style={{
-          overflow: 'auto',
-          height: '100vh',
-          position: 'fixed',
-          left: 0,
-          top: 0,
-          bottom: 0,
-          zIndex: 10,
-        }}
-        theme="dark"
+    <div className="min-h-screen bg-page flex text-text-primary font-sans selection:bg-primary/30">
+
+      {/* Sidebar */}
+      <aside
+        className={`fixed h-screen z-50 glass border-r-0 border-border/40 transition-all duration-300 ease-in-out flex flex-col
+          ${collapsed ? 'w-20' : 'w-64'}
+        `}
       >
         {/* Logo */}
-        <div
-          style={{
-            height: 64,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: collapsed ? 'center' : 'flex-start',
-            padding: collapsed ? 0 : '0 20px',
-            color: '#fff',
-            fontSize: collapsed ? 16 : 18,
-            fontWeight: 600,
-            borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
-            gap: 10,
-            letterSpacing: collapsed ? 0 : 0.5,
-            userSelect: 'none',
-            overflow: 'hidden',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          <img
-            src="/logo-dark.svg"
-            alt="Prism API"
+        <div className={`h-20 flex items-center ${collapsed ? 'justify-center' : 'px-6'} border-b border-border/40 transition-all`}>
+          <div className="relative flex items-center gap-3">
+            <div className="absolute inset-0 bg-primary/20 blur-lg rounded-full animate-active-pulse"></div>
+            <img src="/logo-dark.svg" alt="Prism" className="w-8 h-8 relative z-10" />
+            {!collapsed && (
+              <span className="text-xl font-bold tracking-tight text-white animate-fade-in relative z-10">
+                Prism <span className="text-primary">Admin</span>
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Menu */}
+        <div className="flex-1 overflow-y-auto py-4 px-2 custom-scrollbar">
+          <Menu
+            mode="inline"
+            theme="dark"
+            selectedKeys={[location.pathname]}
+            items={menuItems}
+            onClick={handleMenuClick}
+            inlineCollapsed={collapsed}
             style={{
-              width: collapsed ? 28 : 32,
-              height: collapsed ? 28 : 32,
-              flexShrink: 0,
-            }}
-            onError={(e) => {
-              // Logo 加载失败时隐藏
-              (e.target as HTMLImageElement).style.display = 'none';
+              background: 'transparent',
+              border: 'none',
+              fontSize: '15px'
             }}
           />
-          {!collapsed && <span>Prism API</span>}
         </div>
 
-        {/* 导航菜单 */}
-        <Menu
-          theme="dark"
-          mode="inline"
-          selectedKeys={[location.pathname]}
-          items={menuItems}
-          onClick={handleMenuClick}
-          style={{ borderRight: 0, marginTop: 4 }}
-        />
-
-        {/* 侧边栏底部 — 折叠按钮 */}
+        {/* Collapse Trigger */}
         <div
-          style={{
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height: 48,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderTop: '1px solid rgba(255, 255, 255, 0.06)',
-            cursor: 'pointer',
-            color: 'rgba(255, 255, 255, 0.45)',
-            transition: 'color 0.2s',
-          }}
           onClick={() => setCollapsed(!collapsed)}
-          onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255, 255, 255, 0.85)')}
-          onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255, 255, 255, 0.45)')}
+          className="h-12 border-t border-border/40 flex items-center justify-center cursor-pointer hover:bg-white/5 transition-colors text-text-secondary hover:text-white"
         >
-          {collapsed ? <MenuUnfoldOutlined style={{ fontSize: 16 }} /> : <MenuFoldOutlined style={{ fontSize: 16 }} />}
+          {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
         </div>
-      </Sider>
+      </aside>
 
-      {/* 主内容区 */}
-      <Layout style={{ marginLeft: siderWidth, transition: 'margin-left 0.2s' }}>
-        {/* Header */}
-        <Header
-          style={{
-            padding: '0 24px',
-            background: '#fff',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.03), 0 1px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px 0 rgba(0, 0, 0, 0.02)',
-            position: 'sticky',
-            top: 0,
-            zIndex: 9,
-            height: 56,
-            lineHeight: '56px',
-          }}
-        >
-          {/* 面包屑 */}
-          <Breadcrumb items={getBreadcrumbItems()} />
+      {/* Main Content */}
+      <div
+        className={`flex-1 flex flex-col min-h-screen transition-all duration-300 relative
+          ${collapsed ? 'ml-20' : 'ml-64'}
+        `}
+      >
+        {/* Sticky Header */}
+        <header className="sticky top-0 z-40 h-20 px-8 flex items-center justify-between glass-header">
+          <Breadcrumb
+            items={getBreadcrumbItems()}
+            separator={<span className="text-text-tertiary">/</span>}
+            className="text-text-secondary"
+          />
 
-          {/* 右侧 */}
-          <Dropdown
-            menu={{ items: userMenuItems, onClick: handleUserMenuClick }}
-            placement="bottomRight"
-            trigger={['click']}
-          >
-            <Space style={{ cursor: 'pointer', padding: '0 8px', borderRadius: 6, transition: 'background 0.2s' }}>
-              <Avatar
-                size={32}
-                icon={<UserOutlined />}
-                style={{ background: '#1677ff' }}
+          <div className="flex items-center gap-6">
+            <div className="hidden md:flex items-center bg-page-subtle/50 rounded-full px-4 py-2 border border-border/40 focus-within:border-primary/50 transition-colors">
+              <SearchOutlined className="text-text-tertiary mr-2" />
+              <input
+                type="text"
+                placeholder="Search..."
+                className="bg-transparent border-none outline-none text-sm text-white placeholder-text-tertiary w-32 focus:w-48 transition-all"
               />
-              <Text style={{ fontSize: 14 }}>管理员</Text>
-            </Space>
-          </Dropdown>
-        </Header>
+            </div>
+            <Button type="text" shape="circle" icon={<BellOutlined className="text-text-secondary hover:text-white" />} />
 
-        {/* 内容区域 */}
-        <Content
-          className="page-content"
-          style={{
-            margin: 24,
-            minHeight: 'calc(100vh - 56px - 48px)',
-          }}
-        >
+            <Dropdown menu={{ items: userMenuItems, onClick: handleUserMenuClick }} placement="bottomRight" trigger={['click']}>
+              <div className="flex items-center gap-3 cursor-pointer group">
+                {!collapsed && (
+                  <div className="text-right hidden sm:block">
+                    <div className="text-sm font-medium text-white group-hover:text-primary transition-colors">Administrator</div>
+                    <div className="text-xs text-text-tertiary">System Admin</div>
+                  </div>
+                )}
+                <Avatar
+                  size={36}
+                  style={{ background: token.colorPrimary }}
+                  icon={<UserOutlined />}
+                  className="ring-2 ring-background border border-white/10 group-hover:ring-primary/50 transition-all"
+                />
+              </div>
+            </Dropdown>
+          </div>
+        </header>
+
+        {/* Page Content */}
+        <main className="flex-1 p-8 overflow-y-auto animate-fade-in relative z-0">
+          {/* Background Ambient Light */}
+          <div className="fixed top-20 right-0 w-[500px] h-[500px] bg-primary/5 rounded-full blur-3xl pointer-events-none -z-10"></div>
+
           <Outlet />
-        </Content>
+        </main>
 
-        {/* Footer */}
-        <div
-          style={{
-            textAlign: 'center',
-            padding: '12px 0',
-            color: 'rgba(0, 0, 0, 0.25)',
-            fontSize: 12,
-          }}
-        >
-          Prism API Admin &copy; {new Date().getFullYear()}
-        </div>
-      </Layout>
-    </Layout>
+        <footer className="py-6 text-center text-xs text-text-tertiary border-t border-border/20 mx-8">
+          Prism API Admin System &copy; {new Date().getFullYear()}
+        </footer>
+      </div>
+    </div>
   );
 };
 

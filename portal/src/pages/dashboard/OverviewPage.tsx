@@ -1,17 +1,8 @@
 import { useState, useEffect } from 'react';
-import { 
-  Typography, 
-  Card, 
-  Row, 
-  Col, 
-  Button, 
-  Statistic, 
-  Progress, 
+import {
+  Button,
   message,
-  Alert,
-  Steps,
-  Space,
-  Divider
+  Alert
 } from 'antd';
 import {
   GiftOutlined,
@@ -20,22 +11,27 @@ import {
   ApiOutlined,
   CodeOutlined,
   RocketOutlined,
+  ArrowRightOutlined,
+  FireOutlined
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
+import { useOutletContext, useNavigate } from 'react-router-dom';
 import { quotaService } from '../../services/quotaService';
 import { Line } from '@ant-design/charts';
 
-const { Title, Paragraph, Text } = Typography;
-
 const OverviewPage = () => {
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { isDarkMode } = useOutletContext<{ isDarkMode: boolean }>();
   const [hasSignedInToday, setHasSignedInToday] = useState(false);
 
   // Fetch quota info
   const { data: quotaInfo, isLoading } = useQuery({
     queryKey: ['quotaInfo'],
     queryFn: quotaService.getQuotaInfo,
-    refetchInterval: 30000, // Refetch every 30 seconds
+    refetchInterval: 30000,
   });
 
   // Fetch usage history (7 days)
@@ -49,7 +45,7 @@ const OverviewPage = () => {
     if (quotaInfo?.last_sign_in) {
       const lastSignIn = new Date(quotaInfo.last_sign_in);
       const today = new Date();
-      const isSameDay = 
+      const isSameDay =
         lastSignIn.getDate() === today.getDate() &&
         lastSignIn.getMonth() === today.getMonth() &&
         lastSignIn.getFullYear() === today.getFullYear();
@@ -61,16 +57,16 @@ const OverviewPage = () => {
   const signInMutation = useMutation({
     mutationFn: quotaService.signIn,
     onSuccess: (data) => {
-      message.success(`签到成功！获得 ${data.quota_awarded} tokens`);
+      message.success(t('common.success') + '! ' + t('common.tokens') + ': ' + data.quota_awarded);
       setHasSignedInToday(true);
       queryClient.invalidateQueries({ queryKey: ['quotaInfo'] });
     },
     onError: (error: any) => {
       if (error.response?.data?.error?.code === 409002) {
-        message.warning('今日已签到');
+        message.warning(t('dashboard.status.degraded')); // fallback/placeholder message or specific translation needed
         setHasSignedInToday(true);
       } else {
-        message.error('签到失败，请稍后重试');
+        message.error(t('common.error'));
       }
     },
   });
@@ -80,14 +76,14 @@ const OverviewPage = () => {
   };
 
   // Calculate usage percentage
-  const usagePercentage = quotaInfo 
+  const usagePercentage = quotaInfo
     ? Math.round((quotaInfo.used_quota / quotaInfo.total_quota) * 100)
     : 0;
 
   // Transform usage history data for chart
-  const usageTrendData = usageHistory?.map((item, index) => {
+  const usageTrendData = usageHistory?.map((item) => {
     const date = new Date(item.date);
-    const dayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     return {
       date: dayNames[date.getDay()],
       usage: item.tokens,
@@ -99,231 +95,198 @@ const OverviewPage = () => {
     xField: 'date',
     yField: 'usage',
     smooth: true,
-    color: '#1890ff',
+    color: '#0ea5e9', // Primary Sky 500
     point: {
-      size: 5,
-      shape: 'circle',
+      size: 0,
     },
-    label: {
+    lineStyle: {
+      lineWidth: 3,
+      shadowColor: 'rgba(14, 165, 233, 0.5)',
+      shadowBlur: 10,
+    },
+    area: {
       style: {
-        fill: '#aaa',
+        fill: 'l(270) 0:rgba(14, 165, 233, 0.2) 1:rgba(14, 165, 233, 0)',
       },
+    },
+    xAxis: {
+      grid: { line: { style: { stroke: isDarkMode ? '#333' : '#e5e7eb', lineDash: [4, 4] } } },
+      line: { style: { stroke: 'transparent' } },
+      label: { style: { fill: isDarkMode ? '#666' : '#9ca3af' } },
     },
     yAxis: {
-      label: {
-        formatter: (v: string) => `${v} tokens`,
-      },
+      grid: { line: { style: { stroke: isDarkMode ? '#333' : '#e5e7eb', lineDash: [4, 4] } } },
+      label: { style: { fill: isDarkMode ? '#666' : '#9ca3af' }, formatter: (v: string) => (Number(v) / 1000) + 'k' },
     },
-    tooltip: {
-      formatter: (datum: any) => {
-        return { name: '使用量', value: `${datum.usage} tokens` };
-      },
-    },
+    tooltip: { showMarkers: true },
+    theme: isDarkMode ? 'dark' : 'light',
   };
 
-  return (
-    <div style={{ padding: '0 24px' }}>
-      <Title level={2}>概览</Title>
-      <Paragraph type="secondary">
-        欢迎来到 Prism API 控制台，这里是您的使用概览和快速开始指南。
-      </Paragraph>
-
-      {/* Quota Statistics Cards */}
-      <Row gutter={[16, 16]} style={{ marginTop: 24 }}>
-        <Col xs={24} sm={12} lg={6}>
-          <Card loading={isLoading}>
-            <Statistic
-              title="总额度"
-              value={quotaInfo?.total_quota || 0}
-              suffix="tokens"
-              prefix={<ThunderboltOutlined />}
-              valueStyle={{ color: '#1890ff' }}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card loading={isLoading}>
-            <Statistic
-              title="已使用"
-              value={quotaInfo?.used_quota || 0}
-              suffix="tokens"
-              prefix={<ApiOutlined />}
-              valueStyle={{ color: '#faad14' }}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card loading={isLoading}>
-            <Statistic
-              title="剩余额度"
-              value={quotaInfo?.remaining_quota || 0}
-              suffix="tokens"
-              prefix={<CheckCircleOutlined />}
-              valueStyle={{ color: '#52c41a' }}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <div style={{ textAlign: 'center' }}>
-              <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                每日签到
-              </Text>
-              <Button
-                type="primary"
-                size="large"
-                icon={<GiftOutlined />}
-                onClick={handleSignIn}
-                disabled={hasSignedInToday}
-                loading={signInMutation.isPending}
-                style={{ width: '100%' }}
-              >
-                {hasSignedInToday ? '今日已签到' : '签到领取 1000 tokens'}
-              </Button>
-              {hasSignedInToday && (
-                <Text type="success" style={{ display: 'block', marginTop: 8, fontSize: 12 }}>
-                  <CheckCircleOutlined /> 明天再来吧
-                </Text>
-              )}
-            </div>
-          </Card>
-        </Col>
-      </Row>
-
-      {/* Usage Progress */}
-      <Card style={{ marginTop: 16 }} title="额度使用情况">
-        <Progress
-          percent={usagePercentage}
-          status={usagePercentage > 90 ? 'exception' : usagePercentage > 70 ? 'normal' : 'success'}
-          strokeColor={{
-            '0%': '#108ee9',
-            '100%': '#87d068',
-          }}
-        />
-        <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between' }}>
-          <Text type="secondary">
-            已使用 {quotaInfo?.used_quota || 0} / {quotaInfo?.total_quota || 0} tokens
-          </Text>
-          <Text type="secondary">
-            {usagePercentage}%
-          </Text>
-        </div>
-        {usagePercentage > 80 && (
-          <Alert
-            message="额度即将用尽"
-            description="您的额度使用已超过80%，请注意合理使用或联系管理员增加额度。"
-            type="warning"
-            showIcon
-            style={{ marginTop: 16 }}
-          />
-        )}
-      </Card>
-
-      {/* Usage Trend Chart */}
-      <Card style={{ marginTop: 16 }} title="使用趋势（近7天）" loading={historyLoading}>
-        {usageTrendData.length > 0 ? (
-          <Line {...chartConfig} height={300} />
-        ) : (
-          <div style={{ textAlign: 'center', padding: '40px 0' }}>
-            <Text type="secondary">暂无使用数据</Text>
-          </div>
-        )}
-      </Card>
-
-      {/* Quick Start Guide */}
-      <Card style={{ marginTop: 16 }} title={<><RocketOutlined /> 快速开始指南</>}>
-        <Steps
-          direction="vertical"
-          current={-1}
-          items={[
-            {
-              title: '创建 API 密钥',
-              description: (
-                <Space direction="vertical">
-                  <Text>前往 API 密钥页面创建您的第一个密钥，用于调用平台 API。</Text>
-                  <Button type="link" href="/dashboard/api-keys" style={{ padding: 0 }}>
-                    前往创建 →
-                  </Button>
-                </Space>
-              ),
-              icon: <ApiOutlined />,
-            },
-            {
-              title: '查看可用模型',
-              description: (
-                <Space direction="vertical">
-                  <Text>浏览平台支持的所有 AI 模型，包括 GPT-4、Claude、Gemini 等。</Text>
-                  <Button type="link" href="/dashboard/models" style={{ padding: 0 }}>
-                    查看模型列表 →
-                  </Button>
-                </Space>
-              ),
-              icon: <ThunderboltOutlined />,
-            },
-            {
-              title: '阅读 API 文档',
-              description: (
-                <Space direction="vertical">
-                  <Text>学习如何使用统一的 API 接口调用不同提供商的模型。</Text>
-                  <Button type="link" href="/dashboard/docs" style={{ padding: 0 }}>
-                    查看文档 →
-                  </Button>
-                </Space>
-              ),
-              icon: <CodeOutlined />,
-            },
-            {
-              title: '开始调用 API',
-              description: (
-                <div>
-                  <Text>使用您的 API 密钥开始调用，示例代码：</Text>
-                  <pre style={{ 
-                    background: '#f5f5f5', 
-                    padding: 12, 
-                    borderRadius: 4, 
-                    marginTop: 8,
-                    overflow: 'auto'
-                  }}>
-{`curl https://api.example.com/v1/chat/completions \\
-  -H "Authorization: Bearer YOUR_API_KEY" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "model": "gpt-4",
-    "messages": [{"role": "user", "content": "Hello!"}]
-  }'`}
-                  </pre>
-                </div>
-              ),
-              icon: <RocketOutlined />,
-            },
-          ]}
-        />
-      </Card>
-
-      <Divider />
-
-      {/* Additional Tips */}
-      <Card style={{ marginTop: 16 }} title="💡 使用提示">
-        <Row gutter={[16, 16]}>
-          <Col xs={24} md={12}>
-            <Alert
-              message="每日签到"
-              description="每天签到可获得 1000 tokens，不要忘记哦！"
-              type="info"
-              showIcon
-            />
-          </Col>
-          <Col xs={24} md={12}>
-            <Alert
-              message="合理使用"
-              description="建议根据实际需求选择合适的模型，以节省额度。"
-              type="success"
-              showIcon
-            />
-          </Col>
-        </Row>
-      </Card>
+  const StatCard = ({ title, value, icon, color, subValue }: any) => (
+    <div className="glass-card p-6 rounded-2xl relative overflow-hidden group hover:bg-white hover:shadow-xl dark:hover:bg-white/5 transition-all duration-300">
+      <div className={'absolute top-0 right-0 p-4 opacity-20 group-hover:opacity-40 transition-opacity ' + color}>
+        {icon}
+      </div>
+      <div className="relative z-10">
+        <p className="text-slate-600 dark:text-gray-400 text-sm font-medium mb-1">{title}</p>
+        <h3 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">{value}</h3>
+        {subValue && <p className="text-slate-400 dark:text-gray-500 text-xs mt-1">{subValue}</p>}
+      </div>
+      <div className={'absolute bottom-0 left-0 h-1 w-full bg-gradient-to-r opacity-50 ' + color}></div>
     </div>
+  );
+
+  return (
+    <div className="max-w-7xl mx-auto space-y-8 animate-fade-in">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">{t('dashboard.welcome')}</h1>
+          <p className="text-slate-600 dark:text-gray-400">{t('dashboard.welcomeSub')}</p>
+        </div>
+        <div className="flex gap-3">
+          <Button
+            type="primary"
+            size="large"
+            icon={<GiftOutlined />}
+            onClick={handleSignIn}
+            loading={signInMutation.isPending}
+            disabled={hasSignedInToday}
+            className={`
+              h-12 px-6 rounded-xl border-none shadow-lg
+              ${hasSignedInToday
+                ? 'bg-black/10 dark:bg-white/10 text-text-tertiary cursor-not-allowed'
+                : 'bg-gradient-to-r from-primary-600 to-primary-500 hover:scale-105 transition-transform text-white'
+              }
+            `}
+          >
+            {hasSignedInToday ? t('common.success') : 'Daily Check-in'}
+          </Button>
+          <Button
+            size="large"
+            className="h-12 px-6 rounded-xl bg-white/5 border border-black/10 dark:border-white/10 text-text-primary hover:bg-black/5 dark:hover:bg-white/10"
+            icon={<RocketOutlined />}
+          >
+            {t('dashboard.upgrade')}
+          </Button>
+        </div>
+      </div>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatCard
+          title={t('dashboard.quota.total')}
+          value={isLoading ? '-' : quotaInfo?.total_quota.toLocaleString()}
+          icon={<ThunderboltOutlined style={{ fontSize: 40 }} />}
+          color="from-blue-500 to-cyan-500"
+          subValue={t('dashboard.quota.lifetime')}
+        />
+        <StatCard
+          title={t('dashboard.quota.used')}
+          value={isLoading ? '-' : quotaInfo?.used_quota.toLocaleString()}
+          icon={<ApiOutlined style={{ fontSize: 40 }} />}
+          color="from-orange-500 to-red-500"
+          subValue={`${usagePercentage}${t('dashboard.quota.consumed')}`}
+        />
+        <StatCard
+          title={t('dashboard.quota.remaining')}
+          value={isLoading ? '-' : quotaInfo?.remaining_quota.toLocaleString()}
+          icon={<CheckCircleOutlined style={{ fontSize: 40 }} />}
+          color="from-green-500 to-emerald-500"
+          subValue={t('dashboard.quota.available')}
+        />
+        <div className="glass-card p-6 rounded-2xl flex flex-col justify-center items-center relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary-900/20 to-transparent"></div>
+          <FireOutlined className="text-3xl text-primary mb-2 animate-pulse" />
+          <p className="text-text-secondary text-sm">{t('dashboard.status.title')}</p>
+          <p className="text-xl font-bold text-green-500 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+            {t('dashboard.status.operational')}
+          </p>
+        </div>
+      </div>
+
+      {/* Main Content Split */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Left: Usage Chart */}
+        <div className="lg:col-span-2 space-y-6">
+          <div className="glass-card p-6 rounded-2xl h-[400px]">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-bold text-text-primary">{t('dashboard.trends.title')}</h3>
+              <select className="bg-black/5 dark:bg-black/30 border border-black/10 dark:border-white/10 rounded-lg px-3 py-1 text-xs text-text-secondary outline-none focus:border-primary">
+                <option>{t('dashboard.trends.last7Days')}</option>
+                <option>{t('dashboard.trends.last30Days')}</option>
+              </select>
+            </div>
+            {historyLoading ? (
+              <div className="h-full flex items-center justify-center text-text-tertiary">{t('common.loading')}</div>
+            ) : (
+              <div className="h-[300px] w-full">
+                <Line {...chartConfig} />
+              </div>
+            )}
+          </div>
+
+          <div className="glass-card p-6 rounded-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-text-primary">{t('dashboard.quota.used')}</h3>
+              <span className="text-primary font-mono">{usagePercentage}%</span>
+            </div>
+            <div className="h-3 w-full bg-black/10 dark:bg-black/40 rounded-full overflow-hidden mb-2">
+              <div
+                className={`h-full rounded-full transition-all duration-1000 ${usagePercentage > 90 ? 'bg-red-500' : 'bg-primary'}`}
+                style={{ width: `${usagePercentage}%` }}
+              ></div>
+            </div>
+            {usagePercentage > 80 && (
+              <div className="mt-4 p-3 bg-orange-500/10 border border-orange-500/20 rounded-lg flex items-start gap-3">
+                <Alert message="Quota Warning" type="warning" showIcon className="bg-transparent border-none p-0" />
+                <span className="text-orange-500 text-sm">You have used over 80% of your quota.</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right: Quick Start & Tips */}
+        <div className="space-y-6">
+          <div className="glass-card p-6 rounded-2xl">
+            <h3 className="text-lg font-bold text-text-primary mb-4 flex items-center gap-2">
+              <RocketOutlined className="text-primary" /> {t('dashboard.quickStart.title')}
+            </h3>
+            <div className="space-y-4">
+              {[
+                { title: t('dashboard.quickStart.generateKey.title'), desc: t('dashboard.quickStart.generateKey.desc'), icon: <ApiOutlined />, link: "/dashboard/api-keys" },
+                { title: t('dashboard.quickStart.exploreModels.title'), desc: t('dashboard.quickStart.exploreModels.desc'), icon: <ThunderboltOutlined />, link: "/dashboard/models" },
+                { title: t('dashboard.quickStart.docs.title'), desc: t('dashboard.quickStart.docs.desc'), icon: <CodeOutlined />, link: "/dashboard/docs" },
+              ].map((item, idx) => (
+                <div
+                  key={idx}
+                  className="group p-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 border border-transparent hover:border-slate-200 dark:hover:border-white/5 transition-all cursor-pointer flex items-center gap-4"
+                  onClick={() => navigate(item.link)}
+                >
+                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+                    {item.icon}
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-text-primary font-medium text-sm">{item.title}</h4>
+                    <p className="text-text-tertiary text-xs">{item.desc}</p>
+                  </div>
+                  <ArrowRightOutlined className="text-text-tertiary group-hover:text-text-primary group-hover:translate-x-1 transition-all" />
+                </div>
+              ))}
+            </div >
+          </div >
+
+          <div className="glass-card p-6 rounded-2xl bg-gradient-to-br from-primary-900/10 to-transparent border-primary/20">
+            <h3 className="text-text-primary font-bold mb-2">Need more power?</h3>
+            <p className="text-text-secondary text-sm mb-4">Upgrade to Pro for higher limits and priority support.</p>
+            <Button type="primary" block className="bg-primary/20 border-primary text-primary hover:bg-primary hover:text-white">
+              View Plans
+            </Button>
+          </div>
+        </div >
+      </div >
+    </div >
   );
 };
 
