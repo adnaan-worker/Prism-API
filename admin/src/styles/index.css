@@ -8,7 +8,7 @@
 
 body {
   margin: 0;
-  @apply bg-black text-white antialiased;
+  @apply bg-page text-text-primary antialiased;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
