@@ -2,6 +2,7 @@ package apiconfig
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 )
@@ -58,7 +59,26 @@ func (m *ModelMapper) GetModelMapping(ctx context.Context, modelName string) (st
 		}
 	}
 
-	// 没有找到映射，返回原模型名
+	// 如果没有完全匹配的映射，执行一些常见的模式/前缀匹配兜底（如果配置了通用规则的话可以用在这里，目前硬编码一些常见的兜底）
+	// 作为最后手段，针对常见 OpenAI 模型进行硬编码兜底保护，防止直接发给 Kiro 报错
+	lowerModel := strings.ToLower(modelName)
+	if strings.Contains(lowerModel, "gpt-4") || strings.Contains(lowerModel, "gpt-3.5") {
+		return "claude-sonnet-4.5", nil // Default Kiro fallback for GPT models
+	}
+	
+	if strings.Contains(lowerModel, "claude-3-5-sonnet") {
+		return "claude-sonnet-4.5", nil
+	}
+
+	if strings.Contains(lowerModel, "claude-3-opus") || strings.Contains(lowerModel, "claude-opus-4-5") {
+		return "claude-opus-4.5", nil
+	}
+	
+	if strings.Contains(lowerModel, "claude-3-haiku") || strings.Contains(lowerModel, "claude-haiku-4-5") {
+		return "claude-haiku-4.5", nil
+	}
+
+	// 没有找到任何映射，返回原模型名
 	return modelName, nil
 }
 

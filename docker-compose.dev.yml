@@ -34,22 +34,22 @@ services:
       retries: 5
 
   # Embedding 服务
-  embedding:
-    image: prism-embedding:latest
-    container_name: prism-embedding-dev
-    build:
-      context: ./embedding
-      dockerfile: Dockerfile
-    ports:
-      - "8001:8001"
-    environment:
-      - MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
-      - PORT=8001
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
+  # embedding:
+  #   image: prism-embedding:latest
+  #   container_name: prism-embedding-dev
+  #   build:
+  #     context: ./embedding
+  #     dockerfile: Dockerfile
+  #   ports:
+  #     - "8001:8001"
+  #   environment:
+  #     - MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
+  #     - PORT=8001
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 3
 
 volumes:
   postgres_data:

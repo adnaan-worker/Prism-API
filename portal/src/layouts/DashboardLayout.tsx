@@ -55,6 +55,7 @@ const DashboardLayout = ({ isDarkMode, onThemeToggle }: DashboardLayoutProps) =>
     { key: '/dashboard', icon: <DashboardOutlined />, label: t('menu.dashboard') },
     { key: '/dashboard/api-keys', icon: <KeyOutlined />, label: t('menu.apiKeys') },
     { key: '/dashboard/models', icon: <AppstoreOutlined />, label: t('menu.models') },
+    { key: '/dashboard/playground', icon: <AppstoreOutlined />, label: 'Playground' }, // Using AppstoreOutlined as placeholder for now, translation not required for playground prototype
     { key: '/dashboard/docs', icon: <FileTextOutlined />, label: t('menu.docs') },
     { key: '/dashboard/profile', icon: <UserOutlined />, label: t('menu.profile') },
   ];

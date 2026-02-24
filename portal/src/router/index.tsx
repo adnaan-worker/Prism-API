@@ -9,6 +9,7 @@ import ApiKeysPage from '../pages/dashboard/ApiKeysPage';
 import ModelsPage from '../pages/dashboard/ModelsPage';
 import DocsPage from '../pages/dashboard/DocsPage';
 import ProfilePage from '../pages/dashboard/ProfilePage';
+import PlaygroundPage from '../pages/dashboard/PlaygroundPage';
 
 // Theme state management (will be passed from main.tsx)
 let isDarkMode = false;
@@ -58,6 +59,10 @@ export const router = createBrowserRouter([
       {
         path: 'docs',
         element: <DocsPage />,
+      },
+      {
+        path: 'playground',
+        element: <PlaygroundPage />,
       },
       {
         path: 'profile',
