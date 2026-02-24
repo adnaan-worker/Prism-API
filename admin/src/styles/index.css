@@ -3,42 +3,91 @@
 @tailwind utilities;
 
 :root {
+  color-scheme: light;
+
+  /* Light Mode Colors (Glass/Clean Aesthetic) */
+  --color-bg-default: #f8fafc;
+  /* slate-50 - creates contrast with white cards */
+  --color-bg-subtle: #f1f5f9;
+  /* slate-100 */
+  --color-bg-card: #ffffff;
+  /* White headers/cards */
+  --color-bg-float: #ffffff;
+
+  --color-border-default: #cbd5e1;
+  /* slate-300 - darker for better visibility */
+  --color-border-subtle: #e2e8f0;
+  /* slate-200 */
+
+  --color-text-primary: #0f172a;
+  /* slate-900 */
+  --color-text-secondary: #475569;
+  /* slate-600 */
+  --color-text-tertiary: #64748b;
+  /* slate-500 for better contrast against slate-50 */
+
+  --gradient-glow: radial-gradient(circle at top center, rgba(56, 189, 248, 0.1), transparent 70%);
+}
+
+.dark {
   color-scheme: dark;
+
+  /* Dark Mode Colors ("Advanced Black") */
+  --color-bg-default: #000000;
+  --color-bg-subtle: #0a0a0a;
+  --color-bg-card: #111111;
+  --color-bg-float: #1a1a1a;
+
+  --color-border-default: #262626;
+  --color-border-subtle: #1f1f1f;
+
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #a1a1aa;
+  --color-text-tertiary: #52525b;
+
+  --gradient-glow: radial-gradient(circle at top center, #1a1a1a, #000000);
 }
 
 body {
   margin: 0;
-  @apply bg-page text-text-primary antialiased;
+  min-width: 320px;
+  min-height: 100vh;
+  @apply bg-background text-text-primary antialiased transition-colors duration-300;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
-/* Scrollbar Customization */
+/* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-[#0a0a0a];
+  @apply bg-background-subtle;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-[#262626] rounded;
+  @apply bg-border rounded;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-[#52525b];
+  @apply bg-text-tertiary;
 }
 
-.glass-header {
-  @apply bg-[#111111]/80 backdrop-blur-md border-b border-white/5;
+/* Glassmorphism Utilities */
+.glass {
+  @apply bg-white/70 backdrop-blur-md border border-black/5 dark:bg-black/70 dark:border-white/5;
 }
 
 .glass-card {
-  @apply bg-[#111111]/60 backdrop-blur-md border border-white/5 shadow-sm rounded-xl transition-all duration-300 hover:shadow-md hover:bg-[#111111]/80;
+  @apply bg-white/80 backdrop-blur-xl border border-black/10 shadow-lg dark:bg-black/60 dark:border-white/10 transition-all duration-300 hover:shadow-xl dark:hover:bg-[#111111]/80;
 }
 
-/* Animations */
+.glass-header {
+  @apply glass border-b;
+}
+
+/* Animation Utilities */
 @keyframes active-pulse {
   0% {
     box-shadow: 0 0 0 0 rgba(14, 165, 233, 0.4);
@@ -73,6 +122,20 @@ body {
   animation: fade-in 0.5s ease-out forwards;
 }
 
+@keyframes breathe {
+  0%, 100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
+.animate-breathe {
+  animation: breathe 8s ease-in-out infinite;
+}
 
 /* Utility for Admin Layout */
 .custom-scrollbar::-webkit-scrollbar {
@@ -84,6 +147,5 @@ body {
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #333;
-  border-radius: 4px;
+  @apply bg-border rounded;
 }

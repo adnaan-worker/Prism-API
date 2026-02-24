@@ -7,20 +7,18 @@ export default {
     theme: {
         extend: {
             colors: {
-                page: {
-                    DEFAULT: '#000000',
-                    subtle: '#0a0a0a',
-                    card: '#111111',
-                    float: '#1a1a1a',
+                background: {
+                    DEFAULT: "var(--color-bg-default)",
+                    subtle: "var(--color-bg-subtle)",
                 },
                 border: {
-                    DEFAULT: '#262626',
-                    subtle: '#1f1f1f',
+                    DEFAULT: "var(--color-border-default)",
+                    subtle: "var(--color-border-subtle)",
                 },
                 text: {
-                    primary: '#ffffff',
-                    secondary: '#a1a1aa',
-                    tertiary: '#52525b',
+                    primary: "var(--color-text-primary)",
+                    secondary: "var(--color-text-secondary)",
+                    tertiary: "var(--color-text-tertiary)",
                 },
                 primary: {
                     50: '#f0f9ff',
@@ -35,6 +33,9 @@ export default {
                     900: '#0c4a6e',
                     DEFAULT: '#0ea5e9',
                 },
+            },
+            boxShadow: {
+                'glow': '0 0 20px rgba(14, 165, 233, 0.5)',
             },
             fontFamily: {
                 sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],

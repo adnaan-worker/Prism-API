@@ -1,33 +1,55 @@
 import { theme, ThemeConfig } from 'antd';
 
-export const getAdminTheme = (): ThemeConfig => {
+export const getAdminTheme = (isDarkMode: boolean): ThemeConfig => {
+    if (!isDarkMode) {
+        return {
+            algorithm: theme.defaultAlgorithm,
+            token: {
+                colorPrimary: '#0ea5e9',
+                borderRadius: 8,
+                fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif',
+            },
+        };
+    }
+
     return {
         algorithm: theme.darkAlgorithm,
         token: {
-            colorPrimary: '#0ea5e9',
-            colorBgBase: '#000000',
-            colorBgContainer: '#111111',
-            colorBgElevated: '#1a1a1a',
+            colorPrimary: '#0ea5e9', // Sky 500
+            colorBgBase: '#000000',   // Black
+            colorBgContainer: '#111111', // Card background
+            colorBgElevated: '#1a1a1a',  // Floating elements
             colorBorder: '#262626',
             colorText: '#ffffff',
             colorTextSecondary: '#a1a1aa',
-            borderRadius: 6, // Slightly sharper for professional look
+            borderRadius: 8,
             fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif',
         },
         components: {
             Layout: {
-                bodyBg: '#050505', // Slightly lighter than pure black to differentiate from header
+                bodyBg: '#000000',
                 headerBg: '#111111',
                 siderBg: '#0a0a0a',
-            },
-            Table: {
-                colorBgContainer: '#111111',
-                headerBg: '#1a1a1a',
-                headerColor: '#a1a1aa',
             },
             Card: {
                 colorBgContainer: '#111111',
                 colorBorderSecondary: '#262626',
+            },
+            Button: {
+                primaryShadow: '0 2px 0 rgba(14, 165, 233, 0.1)',
+            },
+            Input: {
+                colorBgContainer: '#0a0a0a',
+                colorBorder: '#262626',
+                activeBorderColor: '#0ea5e9',
+            },
+            Table: {
+                colorBgContainer: '#111111',
+                headerBg: '#1a1a1a',
+            },
+            Modal: {
+                contentBg: '#111111',
+                headerBg: '#111111',
             },
             Menu: {
                 itemBg: 'transparent',
