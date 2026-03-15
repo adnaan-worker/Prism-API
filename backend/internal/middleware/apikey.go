@@ -23,23 +23,32 @@ func NewAPIKey(apiKeyService apikey.Service) *APIKey {
 // Handle API密钥认证处理
 func (m *APIKey) Handle() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 获取Authorization header
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			response.Unauthorized(c, "missing authorization header")
+		// 适配多种协议的API密钥请求头提取
+		var key string
+
+		// 1. OpenAI 格式: Authorization: Bearer <key>
+		if authHeader := c.GetHeader("Authorization"); authHeader != "" {
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+				key = strings.TrimSpace(parts[1])
+			}
+		}
+
+		// 2. Anthropic 格式: x-api-key: <key>
+		if key == "" {
+			key = strings.TrimSpace(c.GetHeader("x-api-key"))
+		}
+
+		// 3. Azure / 其他常见格式: api-key: <key>
+		if key == "" {
+			key = strings.TrimSpace(c.GetHeader("api-key"))
+		}
+
+		if key == "" {
+			response.Unauthorized(c, "missing or invalid api key in request headers")
 			c.Abort()
 			return
 		}
-
-		// 提取API密钥 "Bearer <key>"
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			response.Unauthorized(c, "invalid authorization header format")
-			c.Abort()
-			return
-		}
-
-		key := parts[1]
 
 		// 验证API密钥
 		userID, apiKeyID, err := m.apiKeyService.ValidateAPIKey(c.Request.Context(), key)
