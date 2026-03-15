@@ -185,9 +185,11 @@ func (a *AnthropicAdapter) convertMessages(messages []Message) ([]anthropicMessa
 	var system string
 
 	for _, msg := range messages {
+		contentStr := GetContentAsString(msg.Content)
+
 		if msg.Role == "system" {
 			// Anthropic uses a separate system field
-			system = msg.Content
+			system = contentStr
 		} else if msg.Role == "tool" {
 			// Tool result message
 			anthropicMessages = append(anthropicMessages, anthropicMessage{
@@ -196,7 +198,7 @@ func (a *AnthropicAdapter) convertMessages(messages []Message) ([]anthropicMessa
 					{
 						Type: "tool_result",
 						ID:   msg.ToolCallID,
-						Text: msg.Content,
+						Text: contentStr,
 					},
 				},
 			})
@@ -205,20 +207,20 @@ func (a *AnthropicAdapter) convertMessages(messages []Message) ([]anthropicMessa
 			if len(msg.ToolCalls) > 0 {
 				// Convert tool calls to Anthropic format
 				contents := make([]anthropicContent, 0, len(msg.ToolCalls)+1)
-				
+
 				// Add text content if present
-				if msg.Content != "" {
+				if contentStr != "" {
 					contents = append(contents, anthropicContent{
 						Type: "text",
-						Text: msg.Content,
+						Text: contentStr,
 					})
 				}
-				
+
 				// Add tool use contents
 				for _, tc := range msg.ToolCalls {
 					var input map[string]interface{}
 					json.Unmarshal([]byte(tc.Function.Arguments), &input)
-					
+
 					contents = append(contents, anthropicContent{
 						Type:  "tool_use",
 						ID:    tc.ID,
@@ -226,7 +228,7 @@ func (a *AnthropicAdapter) convertMessages(messages []Message) ([]anthropicMessa
 						Input: input,
 					})
 				}
-				
+
 				anthropicMessages = append(anthropicMessages, anthropicMessage{
 					Role:    msg.Role,
 					Content: contents,
@@ -235,7 +237,7 @@ func (a *AnthropicAdapter) convertMessages(messages []Message) ([]anthropicMessa
 				// Regular text message
 				anthropicMessages = append(anthropicMessages, anthropicMessage{
 					Role:    msg.Role,
-					Content: msg.Content,
+					Content: contentStr,
 				})
 			}
 		}

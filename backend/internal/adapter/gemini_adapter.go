@@ -325,13 +325,15 @@ func (a *GeminiAdapter) convertMessages(messages []Message) ([]geminiContent, *g
 		if role == "assistant" {
 			role = "model"
 		}
-		
+
+		contentStr := GetContentAsString(msg.Content)
+
 		// Extract system message as system instruction
 		if role == "system" {
-			if msg.Content != "" {
+			if contentStr != "" {
 				systemInstruction = &geminiContent{
 					Parts: []geminiPart{
-						{Text: msg.Content},
+						{Text: contentStr},
 					},
 				}
 			}
@@ -341,8 +343,8 @@ func (a *GeminiAdapter) convertMessages(messages []Message) ([]geminiContent, *g
 		parts := []geminiPart{}
 
 		// Add text content if present
-		if msg.Content != "" {
-			parts = append(parts, geminiPart{Text: msg.Content})
+		if contentStr != "" {
+			parts = append(parts, geminiPart{Text: contentStr})
 		}
 
 		// Add tool calls if present
@@ -350,7 +352,7 @@ func (a *GeminiAdapter) convertMessages(messages []Message) ([]geminiContent, *g
 			for _, tc := range msg.ToolCalls {
 				var args map[string]interface{}
 				json.Unmarshal([]byte(tc.Function.Arguments), &args)
-				
+
 				parts = append(parts, geminiPart{
 					FunctionCall: &geminiFunctionCall{
 						Name: tc.Function.Name,
@@ -364,11 +366,11 @@ func (a *GeminiAdapter) convertMessages(messages []Message) ([]geminiContent, *g
 		if msg.ToolCallID != "" {
 			// This is a tool result message
 			var response map[string]interface{}
-			json.Unmarshal([]byte(msg.Content), &response)
+			json.Unmarshal([]byte(contentStr), &response)
 			if response == nil {
-				response = map[string]interface{}{"result": msg.Content}
+				response = map[string]interface{}{"result": contentStr}
 			}
-			
+
 			parts = append(parts, geminiPart{
 				FunctionResponse: &geminiFunctionResponse{
 					Name:     msg.Name, // Tool name should be in Name field

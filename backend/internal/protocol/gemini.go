@@ -144,9 +144,10 @@ func (c *GeminiConverter) FormatResponse(resp *adapter.ChatResponse) (interface{
 	parts := []GeminiPart{}
 
 	// 添加文本内容
-	if choice.Message.Content != "" {
+	contentStr := adapter.GetContentAsString(choice.Message.Content)
+	if contentStr != "" {
 		parts = append(parts, GeminiPart{
-			Text: choice.Message.Content,
+			Text: contentStr,
 		})
 	}
 

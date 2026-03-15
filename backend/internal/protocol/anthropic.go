@@ -164,10 +164,11 @@ func (c *AnthropicConverter) FormatResponse(resp *adapter.ChatResponse) (interfa
 	content := []AnthropicContent{}
 
 	// 添加文本内容
-	if choice.Message.Content != "" {
+	contentStr := adapter.GetContentAsString(choice.Message.Content)
+	if contentStr != "" {
 		content = append(content, AnthropicContent{
 			Type: "text",
-			Text: choice.Message.Content,
+			Text: contentStr,
 		})
 	}
 

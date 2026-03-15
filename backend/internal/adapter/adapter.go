@@ -7,11 +7,18 @@ import (
 
 // Message represents a chat message
 type Message struct {
-	Role       string     `json:"role"`
-	Content    string     `json:"content"`
-	Name       string     `json:"name,omitempty"`
-	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
-	ToolCallID string     `json:"tool_call_id,omitempty"`
+	Role    string `json:"role"`
+	Content interface{} `json:"content"` // string or []ContentBlock for multimodal
+	Name    string `json:"name,omitempty"`
+	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string `json:"tool_call_id,omitempty"`
+}
+
+// ContentBlock represents a content block in multimodal messages
+type ContentBlock struct {
+	Type     string `json:"type"` // "text" or "image_url"
+	Text     string `json:"text,omitempty"`
+	ImageURL *ImageURL `json:"image_url,omitempty"`
 }
 
 // ToolCall represents a tool/function call

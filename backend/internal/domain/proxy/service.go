@@ -470,7 +470,9 @@ func (s *service) extractQueryText(messages []adapter.Message) string {
 	// 提取最后一条用户消息
 	for i := len(messages) - 1; i >= 0; i-- {
 		if messages[i].Role == "user" {
-			return messages[i].Content
+			if content, ok := messages[i].Content.(string); ok {
+				return content
+			}
 		}
 	}
 	return ""

@@ -295,10 +295,11 @@ func (a *KiroAdapter) convertRequest(req *ChatRequest) (*kiroRequest, error) {
 
 	for _, msg := range req.Messages {
 		if msg.Role == "system" {
+			contentStr := GetContentAsString(msg.Content)
 			if systemPrompt != "" {
 				systemPrompt += "\n"
 			}
-			systemPrompt += msg.Content
+			systemPrompt += contentStr
 		} else {
 			nonSystemMessages = append(nonSystemMessages, msg)
 		}
@@ -327,9 +328,9 @@ func (a *KiroAdapter) convertRequest(req *ChatRequest) (*kiroRequest, error) {
 	var pendingToolResults []kiroToolResult
 	systemPromptMerged := false
 
-	for i, msg := range nonSystemMessages {
+for i, msg := range nonSystemMessages {
 		if msg.Role == "user" {
-			userContent := msg.Content
+			userContent := GetContentAsString(msg.Content)
 
 			// Merge system prompt into first user message
 			if !systemPromptMerged && systemPrompt != "" {
@@ -345,12 +346,12 @@ func (a *KiroAdapter) convertRequest(req *ChatRequest) (*kiroRequest, error) {
 				UserInputMessage: &kiroUserMessage{
 					Content: userContent,
 					ModelID: kiroModelID,
-					Origin:  origin,
+					Origin: origin,
 				},
 			})
-		} else if msg.Role == "assistant" {
+} else if msg.Role == "assistant" {
 			// Kiro API requires content to be non-empty
-			assistantContent := msg.Content
+			assistantContent := GetContentAsString(msg.Content)
 			if assistantContent == "" && len(msg.ToolCalls) > 0 {
 				assistantContent = "Using tools."
 			} else if assistantContent == "" {
@@ -378,13 +379,13 @@ func (a *KiroAdapter) convertRequest(req *ChatRequest) (*kiroRequest, error) {
 					ToolUses: toolUses,
 				},
 			})
-		} else if msg.Role == "tool" {
+} else if msg.Role == "tool" {
 			// Tool result - collect for processing
 			if msg.ToolCallID != "" {
 				pendingToolResults = append(pendingToolResults, kiroToolResult{
 					ToolUseID: msg.ToolCallID,
 					Content: []kiroToolResultContent{
-						{Text: msg.Content},
+						{Text: GetContentAsString(msg.Content)},
 					},
 					Status: "success",
 				})
