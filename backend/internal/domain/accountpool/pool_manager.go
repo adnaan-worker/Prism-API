@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"strings"
 	"sync"
 	"time"
 )
@@ -72,11 +73,6 @@ func (pm *PoolManager) GetAdapter(ctx context.Context, poolID uint) (interface{}
 		if err := pm.repo.UpdateCredential(ctx, cred); err != nil {
 			return nil, 0, errors.Wrap(err, "failed to save refreshed credential")
 		}
-	}
-
-	// 检查凭据是否健康
-	if !cred.IsHealthy() {
-		return nil, 0, errors.New(500001, "selected credential is not healthy")
 	}
 
 	// 检查速率限制
@@ -291,9 +287,17 @@ func (pm *PoolManager) RecordError(ctx context.Context, credID uint, errMsg stri
 	cred.IncrementErrors()
 	cred.LastError = errMsg
 
-	// 只有在错误率非常高时才标记为不健康（避免临时错误导致凭据被禁用）
-	// 并且至少要有 10 次请求才开始计算错误率
-	if cred.TotalRequests >= 10 && cred.GetErrorRate() > 0.8 {
+	// 检查是否是致命错误（立即标记为不健康）
+	isFatalError := strings.Contains(errMsg, "403") || 
+		strings.Contains(errMsg, "invalid") || 
+		strings.Contains(errMsg, "unauthorized") ||
+		strings.Contains(errMsg, "forbidden")
+
+	if isFatalError {
+		// 403/401/invalid token 等致命错误，立即标记为不健康
+		cred.UpdateHealthStatus(HealthStatusUnhealthy)
+	} else if cred.TotalRequests >= 10 && cred.GetErrorRate() > 0.8 {
+		// 只有在错误率非常高时才标记为不健康（避免临时错误导致凭据被禁用）
 		cred.UpdateHealthStatus(HealthStatusUnhealthy)
 	}
 

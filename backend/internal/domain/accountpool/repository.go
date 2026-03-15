@@ -338,7 +338,7 @@ func (r *repository) FindExpiringCredentials(ctx context.Context, provider strin
 func (r *repository) FindActiveCredentialsByPoolID(ctx context.Context, poolID uint) ([]*AccountCredential, error) {
 	var creds []*AccountCredential
 	err := r.db.WithContext(ctx).
-		Where("pool_id = ? AND is_active = ?", poolID, true).
+		Where("pool_id = ? AND is_active = ? AND health_status != ?", poolID, true, "unhealthy").
 		Order("weight DESC, total_requests ASC").
 		Find(&creds).Error
 	return creds, err
