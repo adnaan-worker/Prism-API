@@ -4,7 +4,7 @@ package protocol
 type AnthropicRequest struct {
 	Model         string             `json:"model"`
 	Messages      []AnthropicMessage `json:"messages"`
-	System        string             `json:"system,omitempty"`
+System interface{} `json:"system,omitempty"` // string or []string for system prompts
 	MaxTokens     int                `json:"max_tokens"`
 	Temperature   *float64           `json:"temperature,omitempty"`
 	TopP          *float64           `json:"top_p,omitempty"`

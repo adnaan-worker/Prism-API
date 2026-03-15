@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"strings"
 	"time"
@@ -114,36 +115,57 @@ func (w *StreamWrapper) parseUsageAndLog() {
 		}
 	}
 
-	// 如果没有解析到 token 使用信息，使用默认值
+// 如果没有解析到 token 使用信息，使用默认值
 	if w.usage.TotalTokens == 0 {
 		w.logger.Warn("No token usage found in stream, using default values")
 		// 估算 token 数量（简单估算：每个字符约 0.25 个 token）
 		w.usage.PromptTokens = len(w.req.ChatRequest.Messages) * 100 // 粗略估算
-		w.usage.CompletionTokens = 100                                // 默认值
+		w.usage.CompletionTokens = 100 // 默认值
 		w.usage.TotalTokens = w.usage.PromptTokens + w.usage.CompletionTokens
 	}
 
 	// 计算响应时间
 	responseTime := time.Since(w.startTime)
 
+	// 创建非取消的 context 用于计费和日志记录
+	// 因为流已经完成，不应被客户端取消影响
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	// 计算并扣除费用
 	cost, err := w.service.calculateAndDeductCost(
-		w.ctx,
+		ctx,
 		w.req.UserID,
 		w.apiConfigID,
 		w.req.Model,
 		*w.usage,
 	)
 	if err != nil {
-		w.logger.Error("✗ Failed to calculate and deduct cost",
-			logger.Uint("user_id", w.req.UserID),
-			logger.String("model", w.req.Model),
-			logger.Error(err))
-	} else {
-		w.logger.Info("✓ Cost calculated and deducted",
-			logger.Uint("user_id", w.req.UserID),
-			logger.Int("cost", cost),
-			logger.Int("total_tokens", w.usage.TotalTokens))
+		// 检查是否是 context 取消错误，如果是则使用后台 goroutine 异步处理
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			w.logger.Warn("Context canceled during cost calculation, trying async", logger.Error(err))
+			// 异步处理，避免阻塞客户端
+			go func() {
+				asyncCtx, asyncCancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer asyncCancel()
+				_, asyncErr := w.service.calculateAndDeductCost(
+					asyncCtx,
+					w.req.UserID,
+					w.apiConfigID,
+					w.req.Model,
+					*w.usage,
+				)
+				if asyncErr != nil {
+					w.logger.Error("Async cost calculation failed", logger.Error(asyncErr))
+				} else {
+					w.logger.Info("Async cost calculated successfully", logger.Int("cost", cost))
+				}
+			}()
+		} else {
+			w.logger.Error("✗ Failed to calculate and deduct cost", logger.Uint("user_id", w.req.UserID), logger.String("model", w.req.Model), logger.Error(err))
+		}
+} else {
+		w.logger.Info("✓ Cost calculated and deducted", logger.Uint("user_id", w.req.UserID), logger.Int("cost", cost), logger.Int("total_tokens", w.usage.TotalTokens))
 	}
 
 	// 记录成功（如果使用账号池）

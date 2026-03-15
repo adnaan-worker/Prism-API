@@ -56,11 +56,26 @@ func (c *AnthropicConverter) ParseRequest(rawBody []byte, model string) (*adapte
 	messages := make([]adapter.Message, 0, len(anthropicReq.Messages)+1)
 
 	// 添加系统消息（Anthropic 的 system 是顶层字段）
-	if anthropicReq.System != "" {
-		messages = append(messages, adapter.Message{
-			Role:    "system",
-			Content: anthropicReq.System,
-		})
+	// 支持 string 或 []string 格式（AI SDK 3.x 发送数组）
+	if anthropicReq.System != nil {
+		switch sys := anthropicReq.System.(type) {
+		case string:
+			if sys != "" {
+				messages = append(messages, adapter.Message{
+					Role:    "system",
+					Content: sys,
+				})
+			}
+		case []interface{}:
+			for _, part := range sys {
+				if text, ok := part.(string); ok && text != "" {
+					messages = append(messages, adapter.Message{
+						Role:    "system",
+						Content: text,
+					})
+				}
+			}
+		}
 	}
 
 	// 转换用户和助手消息

@@ -38,8 +38,25 @@ func NewRepository(db *gorm.DB) Repository {
 	return &repository{db: db}
 }
 
-// Create 创建缓存
+// Create 创建缓存（如果已存在则更新）
 func (r *repository) Create(ctx context.Context, cache *RequestCache) error {
+	// 先检查是否已存在
+	existing, err := r.FindByCacheKey(ctx, cache.CacheKey)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+
+	if existing != nil {
+		// 已存在，更新响应和过期时间
+		existing.Response = cache.Response
+		existing.ExpiresAt = cache.ExpiresAt
+		if cache.Embedding != "" {
+			existing.Embedding = cache.Embedding
+		}
+		return r.db.WithContext(ctx).Save(existing).Error
+	}
+
+	// 不存在，创建新记录
 	return r.db.WithContext(ctx).Create(cache).Error
 }
 
