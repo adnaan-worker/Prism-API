@@ -92,17 +92,7 @@ type kiroUserMessage struct {
 	Content                 string              `json:"content"`
 	ModelID                 string              `json:"modelId"`                           // Required: Kiro model ID
 	Origin                  string              `json:"origin"`                            // Required: "AI_EDITOR"
-	Images                  []kiroImage         `json:"images,omitempty"`                  // Optional: base64 images
 	UserInputMessageContext *kiroMessageContext `json:"userInputMessageContext,omitempty"` // Optional: tools and tool results
-}
-
-type kiroImage struct {
-	Format string          `json:"format"`
-	Source kiroImageSource `json:"source"`
-}
-
-type kiroImageSource struct {
-	Bytes string `json:"bytes"`
 }
 
 type kiroAssistantMessage struct {
@@ -212,7 +202,7 @@ func (a *KiroAdapter) Call(ctx context.Context, req *ChatRequest) (*ChatResponse
 	}
 
 	// Convert to unified response
-	return a.convertEventStreamResponse(req, parsedContent, toolCalls, req.Model), nil
+	return a.convertEventStreamResponse(parsedContent, toolCalls, req.Model), nil
 }
 
 // CallStream makes a streaming request to Kiro API
@@ -302,13 +292,7 @@ func (a *KiroAdapter) convertRequest(req *ChatRequest) (*kiroRequest, error) {
 	// Extract system prompt
 	var systemPrompt string
 	var nonSystemMessages []Message
-	
-	// Check if thinking mode is requested
-	thinkingEnabled := false
-	if strings.Contains(strings.ToLower(kiroModelID), "thinking") {
-		thinkingEnabled = true
-	}
-	
+
 	for _, msg := range req.Messages {
 		if msg.Role == "system" {
 			if systemPrompt != "" {
@@ -341,7 +325,6 @@ func (a *KiroAdapter) convertRequest(req *ChatRequest) (*kiroRequest, error) {
 	// Build history messages - collect all messages first
 	var allMessages []kiroMessage
 	var pendingToolResults []kiroToolResult
-	var currentImages []kiroImage // Hold images for the current user message
 	systemPromptMerged := false
 
 	for i, msg := range nonSystemMessages {
@@ -357,20 +340,13 @@ func (a *KiroAdapter) convertRequest(req *ChatRequest) (*kiroRequest, error) {
 			if userContent == "" {
 				userContent = "Continue"
 			}
-			
-			userMsg := &kiroUserMessage{
-				Content: userContent,
-				ModelID: kiroModelID,
-				Origin:  origin,
-			}
-			
-			if len(currentImages) > 0 {
-				userMsg.Images = currentImages
-				currentImages = nil // Reset for next message
-			}
 
 			allMessages = append(allMessages, kiroMessage{
-				UserInputMessage: userMsg,
+				UserInputMessage: &kiroUserMessage{
+					Content: userContent,
+					ModelID: kiroModelID,
+					Origin:  origin,
+				},
 			})
 		} else if msg.Role == "assistant" {
 			// Kiro API requires content to be non-empty
@@ -471,16 +447,6 @@ func (a *KiroAdapter) convertRequest(req *ChatRequest) (*kiroRequest, error) {
 				Origin:  origin,
 			},
 		}
-	}
-
-	// Inject thinking prompt if enabled
-	if thinkingEnabled {
-		thinkingPrompt := `<thinking_mode>enabled</thinking_mode>
-<max_thinking_length>200000</max_thinking_length>
-
-`
-		currentMsg.UserInputMessage.Content = thinkingPrompt + currentMsg.UserInputMessage.Content
-		fmt.Printf("[Kiro] Injected thinking mode preamble into current message for model: %s\n", kiroModelID)
 	}
 
 	// If system prompt not merged yet, add to current message
@@ -1038,7 +1004,7 @@ func (a *KiroAdapter) parseEventStreamChunk(rawData []byte) (string, []ToolCall,
 }
 
 // convertEventStreamResponse converts parsed EventStream data to unified format
-func (a *KiroAdapter) convertEventStreamResponse(req *ChatRequest, content string, toolCalls []ToolCall, model string) *ChatResponse {
+func (a *KiroAdapter) convertEventStreamResponse(content string, toolCalls []ToolCall, model string) *ChatResponse {
 	msg := Message{
 		Role:    "assistant",
 		Content: content,
@@ -1048,10 +1014,9 @@ func (a *KiroAdapter) convertEventStreamResponse(req *ChatRequest, content strin
 		msg.ToolCalls = toolCalls
 	}
 
-	// Estimate token usage
-	// A more accurate estimation comparing to just length/4
-	promptTokens := estimatePromptTokens(req.Messages, req.Tools)
-	completionTokens := estimateCompletionTokens(content, toolCalls)
+	// Estimate token usage (Kiro doesn't provide token counts)
+	promptTokens := estimateTokens(content) / 2
+	completionTokens := estimateTokens(content)
 
 	return &ChatResponse{
 		ID:      fmt.Sprintf("kiro-%s", uuid.New().String()),
@@ -1095,45 +1060,10 @@ func generateMachineID() string {
 	return uuid.New().String()[:32]
 }
 
-// estimateTokens returns a basic token estimation for strings
+// estimateTokens estimates token count from text
 func estimateTokens(text string) int {
+	// Rough estimate: 1 token ≈ 4 characters
 	return len(text) / 4
-}
-
-// estimatePromptTokens estimates the token count for the incoming request
-func estimatePromptTokens(messages []Message, tools []Tool) int {
-	tokens := 0
-	for _, msg := range messages {
-		tokens += estimateTokens(msg.Role) + estimateTokens(msg.Content)
-		for _, tc := range msg.ToolCalls {
-			tokens += estimateTokens(tc.Function.Name) + estimateTokens(tc.Function.Arguments)
-		}
-	}
-	
-	// Estimate tool definitions
-	for _, tool := range tools {
-		tokens += estimateTokens(tool.Function.Name) + estimateTokens(tool.Function.Description)
-		if tool.Function.Parameters != nil {
-			b, _ := json.Marshal(tool.Function.Parameters)
-			tokens += estimateTokens(string(b))
-		}
-	}
-	
-	// Add some overhead baseline
-	return tokens + 10
-}
-
-// estimateCompletionTokens estimates the token count for the response
-func estimateCompletionTokens(content string, toolCalls []ToolCall) int {
-	tokens := estimateTokens(content)
-	for _, tc := range toolCalls {
-		tokens += estimateTokens(tc.Function.Name) + estimateTokens(tc.Function.Arguments)
-	}
-	// Ensure at least 1 token if there is a response
-	if tokens == 0 && (content != "" || len(toolCalls) > 0) {
-		return 1
-	}
-	return tokens
 }
 
 // parseKiroToolCalls parses Kiro's tool call format from response
@@ -1196,17 +1126,13 @@ func (a *KiroAdapter) streamEventStreamToSSE(eventStreamBody io.Reader, sseWrite
 	readBuf := make([]byte, 4096)
 	chunkID := 0
 	
-	// Ensure currentToolUse map properly initializes
+	// Track tool use state for accumulating input fragments
 	type toolUseState struct {
-		id         string
-		name       string
+		id        string
+		name      string
 		argsBuffer string
 	}
 	currentToolUse := make(map[string]*toolUseState) // key: toolUseId
-
-	// State for thinking mode parser
-	inThinkingBlock := false
-	var textBuffer string
 
 	for {
 		n, err := eventStreamBody.Read(readBuf)
@@ -1255,59 +1181,26 @@ func (a *KiroAdapter) streamEventStreamToSSE(eventStreamBody io.Reader, sseWrite
 						if content, hasContent := actualEvent["content"].(string); hasContent {
 							// Skip followupPrompt events
 							if followup, hasFollowup := actualEvent["followupPrompt"]; !hasFollowup || followup == nil {
-								// Parse thinking blocks
-								textBuffer += content
-								for {
-									if !inThinkingBlock {
-										thinkingStart := strings.Index(textBuffer, "<thinking>")
-										if thinkingStart != -1 {
-											// Output content before thinking tag
-											if thinkingStart > 0 {
-												beforeThinking := textBuffer[:thinkingStart]
-												chunkID++
-												chunkJSON, _ := json.Marshal(createStreamChunk(chunkID, model, beforeThinking, false))
-												fmt.Fprintf(sseWriter, "data: %s\n\n", string(chunkJSON))
-											}
-											textBuffer = textBuffer[thinkingStart+10:]
-											inThinkingBlock = true
-										} else {
-											// No thinking tag, but keep some buffer in case it's split across chunks
-											// Safe to output everything except the last 9 chars (max length of "<thinking")
-											if len(textBuffer) > 9 {
-												safePart := textBuffer[:len(textBuffer)-9]
-												textBuffer = textBuffer[len(textBuffer)-9:]
-												chunkID++
-												chunkJSON, _ := json.Marshal(createStreamChunk(chunkID, model, safePart, false))
-												fmt.Fprintf(sseWriter, "data: %s\n\n", string(chunkJSON))
-											}
-											break
-										}
-									} else {
-										// Inside a thinking block
-										thinkingEnd := strings.Index(textBuffer, "</thinking>")
-										if thinkingEnd != -1 {
-											// Output thinking content
-											if thinkingEnd > 0 {
-												thinkingContent := textBuffer[:thinkingEnd]
-												chunkID++
-												chunkJSON, _ := json.Marshal(createStreamChunk(chunkID, model, thinkingContent, true))
-												fmt.Fprintf(sseWriter, "data: %s\n\n", string(chunkJSON))
-											}
-											textBuffer = textBuffer[thinkingEnd+11:]
-											inThinkingBlock = false
-										} else {
-											// Keep some buffer for closing tag "<"
-											if len(textBuffer) > 10 {
-												safePart := textBuffer[:len(textBuffer)-10]
-												textBuffer = textBuffer[len(textBuffer)-10:]
-												chunkID++
-												chunkJSON, _ := json.Marshal(createStreamChunk(chunkID, model, safePart, true))
-												fmt.Fprintf(sseWriter, "data: %s\n\n", string(chunkJSON))
-											}
-											break
-										}
-									}
+								// Write SSE chunk
+								chunkID++
+								chunk := ChatStreamChunk{
+									ID:      fmt.Sprintf("chatcmpl-%d", chunkID),
+									Object:  "chat.completion.chunk",
+									Created: time.Now().Unix(),
+									Model:   model,
+									Choices: []StreamChoice{
+										{
+											Index: 0,
+											Delta: StreamDelta{
+												Content: content,
+											},
+											FinishReason: "",
+										},
+									},
 								}
+
+								chunkJSON, _ := json.Marshal(chunk)
+								fmt.Fprintf(sseWriter, "data: %s\n\n", string(chunkJSON))
 							}
 						}
 
@@ -1404,14 +1297,6 @@ func (a *KiroAdapter) streamEventStreamToSSE(eventStreamBody io.Reader, sseWrite
 			}
 		}
 
-		// Empty remaining buffer
-		if textBuffer != "" {
-			chunkID++
-			chunkJSON, _ := json.Marshal(createStreamChunk(chunkID, model, textBuffer, inThinkingBlock))
-			fmt.Fprintf(sseWriter, "data: %s\n\n", string(chunkJSON))
-			textBuffer = ""
-		}
-
 		if err != nil {
 			if err == io.EOF {
 				// Send final chunk
@@ -1438,29 +1323,6 @@ func (a *KiroAdapter) streamEventStreamToSSE(eventStreamBody io.Reader, sseWrite
 	}
 }
 
-// createStreamChunk creates a chat stream chunk for SSE output
-func createStreamChunk(id int, model, content string, isReasoning bool) ChatStreamChunk {
-	delta := StreamDelta{}
-	if isReasoning {
-		delta.ReasoningContent = content
-	} else {
-		delta.Content = content
-	}
-	
-	return ChatStreamChunk{
-		ID:      fmt.Sprintf("chatcmpl-%d", id),
-		Object:  "chat.completion.chunk",
-		Created: time.Now().Unix(),
-		Model:   model,
-		Choices: []StreamChoice{
-			{
-				Index: 0,
-				Delta: delta,
-			},
-		},
-	}
-}
-
 // ChatStreamChunk represents a streaming response chunk
 type ChatStreamChunk struct {
 	ID      string         `json:"id"`
@@ -1479,10 +1341,9 @@ type StreamChoice struct {
 
 // StreamDelta represents the delta content in streaming
 type StreamDelta struct {
-	Role             string     `json:"role,omitempty"`
-	Content          string     `json:"content,omitempty"`
-	ReasoningContent string     `json:"reasoning_content,omitempty"`
-	ToolCalls        []ToolCall `json:"tool_calls,omitempty"`
+	Role      string     `json:"role,omitempty"`
+	Content   string     `json:"content,omitempty"`
+	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
 }
 
 // parseSSEStream parses Server-Sent Events stream from Kiro

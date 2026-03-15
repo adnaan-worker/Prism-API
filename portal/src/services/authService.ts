@@ -49,9 +49,4 @@ export const authService = {
   isAuthenticated(): boolean {
     return !!localStorage.getItem('token');
   },
-
-  // Get current token
-  getToken(): string | null {
-    return localStorage.getItem('token');
-  }
 };

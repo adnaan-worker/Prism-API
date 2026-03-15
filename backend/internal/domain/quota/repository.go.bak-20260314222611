@@ -3,12 +3,10 @@ package quota
 import (
 	"api-aggregator/backend/internal/domain/user"
 	"context"
-	stdErrors "errors"
-	apperrors "api-aggregator/backend/pkg/errors"
+	"errors"
 	"time"
 
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 // Repository 配额仓储接口
@@ -45,7 +43,7 @@ func (r *repository) FindUserByID(ctx context.Context, id uint) (*user.User, err
 	var u user.User
 	err := r.db.WithContext(ctx).First(&u, id).Error
 	if err != nil {
-		if stdErrors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, err
@@ -77,16 +75,16 @@ func (r *repository) IncrementUsedQuota(ctx context.Context, userID uint, amount
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// 使用行锁查询用户
 		var u user.User
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&u, userID).Error; err != nil {
-			if stdErrors.Is(err, gorm.ErrRecordNotFound) {
-				return apperrors.ErrUserNotFound
+		if err := tx.Clauses(&forUpdate{}).First(&u, userID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return errors.ErrUserNotFound
 			}
 			return err
 		}
 
 		// 检查配额是否充足
 		if u.Quota-u.UsedQuota < amount {
-			return apperrors.ErrQuotaExceeded
+			return errors.ErrQuotaExceeded
 		}
 
 		// 扣减配额
@@ -94,6 +92,21 @@ func (r *repository) IncrementUsedQuota(ctx context.Context, userID uint, amount
 			Where("id = ?", userID).
 			UpdateColumn("used_quota", gorm.Expr("used_quota + ?", amount)).Error
 	})
+}
+
+// forUpdate 用于行级锁
+type forUpdate struct{}
+
+func (f *forUpdate) Name() string {
+	return "FOR UPDATE"
+}
+
+func (f *forUpdate) Build(builder gorm.ClauseBuilder) {
+	builder.WriteString(" FOR UPDATE")
+}
+
+func (f *forUpdate) MergeClause(clause *gorm.Clause) {
+	clause.Expression = f
 }
 
 // CreateSignInRecord 创建签到记录
@@ -113,7 +126,7 @@ func (r *repository) FindTodaySignIn(ctx context.Context, userID uint) (*SignInR
 		First(&record).Error
 	
 	if err != nil {
-		if stdErrors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, err

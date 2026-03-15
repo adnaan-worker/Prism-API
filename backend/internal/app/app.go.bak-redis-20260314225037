@@ -24,7 +24,6 @@ import (
 	"api-aggregator/backend/pkg/runtime"
 	"context"
 	"database/sql"
-	"net/url"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -134,20 +133,15 @@ func (app *App) configureDBPool(sqlDB *sql.DB) {
 
 // initCache 初始化缓存
 func (app *App) initCache() error {
+	// 处理 Redis URL，去掉 redis:// 前缀
 	redisAddr := app.Config.Redis.URL
-	redisPassword := ""
-	if parsed, err := url.Parse(app.Config.Redis.URL); err == nil && parsed.Host != "" {
-		redisAddr = parsed.Host
-		if parsed.User != nil {
-			if p, ok := parsed.User.Password(); ok {
-				redisPassword = p
-			}
-		}
+	if len(redisAddr) > 8 && redisAddr[:8] == "redis://" {
+		redisAddr = redisAddr[8:]
 	}
 	
 	cache, err := pkgCache.NewRedis(&pkgCache.RedisConfig{
 		Addr:         redisAddr,
-		Password:     redisPassword,
+		Password:     "",
 		DB:           0,
 		PoolSize:     app.Config.Redis.PoolSize,
 		MinIdleConns: app.Config.Redis.MinIdleConn,

@@ -30,8 +30,8 @@ type KiroAccountImport struct {
 		ExpiresAt  int64  `json:"expiresAt,omitempty"`
 	} `json:"subscription"`
 	Usage struct {
-		Current      float64 `json:"current"`
-		Limit        float64 `json:"limit"`
+		Current      int     `json:"current"`
+		Limit        int     `json:"limit"`
 		PercentUsed  float64 `json:"percentUsed"`
 	} `json:"usage"`
 	Status string `json:"status"`

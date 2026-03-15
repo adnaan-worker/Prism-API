@@ -1,126 +1,58 @@
-version: '3.8'
-
 services:
-  postgres:
-    image: postgres:15-alpine
-    container_name: prism-api-postgres
-    ports:
-      - "5432:5432"
-    environment:
-      POSTGRES_DB: api_aggregator
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  redis:
-    image: redis:7-alpine
-    container_name: prism-api-redis
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  embedding:
-    build:
-      context: ./embedding-service
-      dockerfile: Dockerfile
-    container_name: prism-api-embedding
-    ports:
-      - "8765:8765"
-    environment:
-      MODEL_NAME: all-MiniLM-L6-v2
-      HOST: 0.0.0.0
-      PORT: 8765
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8765/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-    restart: unless-stopped
-
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: prism-api-backend
-    ports:
-      - "8080:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      embedding:
-        condition: service_healthy
     environment:
-      # Database
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/api_aggregator?sslmode=disable
+      DATABASE_URL: postgres://postgres:du_adnaan%40@postgres16:5432/api_aggregator?sslmode=disable
       DB_MAX_OPEN_CONNS: 25
       DB_MAX_IDLE_CONNS: 5
       DB_CONN_MAX_LIFETIME: 5m
-      # Redis
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://:du_adnaan%40@redis7:6379
       REDIS_POOL_SIZE: 10
       REDIS_MIN_IDLE_CONN: 2
-      # JWT
       JWT_SECRET: your-secret-key-change-in-production
-      # Server
       PORT: 8080
       SERVER_READ_TIMEOUT: 10s
       SERVER_WRITE_TIMEOUT: 10s
       REQUEST_TIMEOUT: 30s
-      # Embedding Service
-      EMBEDDING_URL: http://embedding:8765
-      EMBEDDING_TIMEOUT: 30s
-      EMBEDDING_ENABLED: "true"
-      # Cache
+      EMBEDDING_URL: http://127.0.0.1:8765
+      EMBEDDING_TIMEOUT: 3s
+      EMBEDDING_ENABLED: "false"
       CACHE_ENABLED: "true"
       CACHE_TTL: 24h
-      CACHE_SEMANTIC_MATCH: "true"
+      CACHE_SEMANTIC_MATCH: "false"
       CACHE_THRESHOLD: "0.85"
+      REGISTRATION_ENABLED: "true"
+      DEFAULT_QUOTA: "10000"
     restart: unless-stopped
+    networks:
+      - external_network
 
   portal:
     build:
       context: ./portal
       dockerfile: Dockerfile
     container_name: prism-api-portal
-    ports:
-      - "3000:80"
     restart: unless-stopped
+    depends_on:
+      - backend
+    networks:
+      - external_network
 
   admin:
     build:
       context: ./admin
       dockerfile: Dockerfile
     container_name: prism-api-admin
-    ports:
-      - "3001:80"
     restart: unless-stopped
-
-  nginx:
-    image: nginx:alpine
-    container_name: prism-api-nginx
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
       - backend
-      - portal
-      - admin
-    restart: unless-stopped
+    networks:
+      - external_network
 
-volumes:
-  postgres_data:
+networks:
+  external_network:
+    name: adnaan_network
+    external: true

@@ -120,7 +120,7 @@ func Load() (*Config, error) {
 		},
 		Registration: RegistrationConfig{
 			Enabled:      getEnvAsBool("REGISTRATION_ENABLED", true),
-			DefaultQuota: int64(getEnvAsInt("DEFAULT_QUOTA", 10000)),
+			DefaultQuota: getEnvAsInt("DEFAULT_QUOTA", 10000),
 		},
 	}
 

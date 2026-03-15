@@ -22,22 +22,31 @@ type Service interface {
 
 // service 认证服务实现
 type service struct {
-	repo      Repository
-	jwtSecret string
-	logger    logger.Logger
+	repo           Repository
+	jwtSecret      string
+	defaultQuota   int64
+	registrationEn bool
+	logger         logger.Logger
 }
 
 // NewService 创建认证服务
-func NewService(repo Repository, jwtSecret string, logger logger.Logger) Service {
+func NewService(repo Repository, jwtSecret string, defaultQuota int64, registrationEnabled bool, logger logger.Logger) Service {
 	return &service{
-		repo:      repo,
-		jwtSecret: jwtSecret,
-		logger:    logger,
+		repo:           repo,
+		jwtSecret:      jwtSecret,
+		defaultQuota:   defaultQuota,
+		registrationEn: registrationEnabled,
+		logger:         logger,
 	}
 }
 
 // Register 用户注册
 func (s *service) Register(ctx context.Context, req *RegisterRequest) (*RegisterResponse, error) {
+	// 检查注册是否开启
+	if !s.registrationEn {
+		return nil, errors.New(403003, "Registration is currently disabled")
+	}
+
 	// 检查用户名是否已存在
 	existingUser, err := s.repo.FindUserByUsername(ctx, req.Username)
 	if err != nil {
@@ -70,7 +79,7 @@ func (s *service) Register(ctx context.Context, req *RegisterRequest) (*Register
 		Username:     req.Username,
 		Email:        req.Email,
 		PasswordHash: hashedPassword,
-		Quota:        10000, // 默认配额
+		Quota:        s.defaultQuota, // 使用配置的默认配额
 		UsedQuota:    0,
 		IsAdmin:      false,
 		Status:       "active",

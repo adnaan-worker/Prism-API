@@ -119,34 +119,19 @@ func (s *service) SignIn(ctx context.Context, userID uint) (*SignInResponse, err
 	}, nil
 }
 
-// DeductQuota 扣除配额
+// DeductQuota 扣除配额（原子操作）
 func (s *service) DeductQuota(ctx context.Context, userID uint, amount int64) error {
 	if amount < 0 {
 		return errors.ErrInvalidParam.WithDetails("Amount must be non-negative")
 	}
 
-	// 获取用户
-	user, err := s.repo.FindUserByID(ctx, userID)
-	if err != nil {
-		s.logger.Error("Failed to find user", logger.Uint("user_id", userID), logger.Error(err))
-		return errors.Wrap(err, 500002, "Failed to find user")
-	}
-	if user == nil {
-		return errors.ErrUserNotFound
-	}
-
-	// 检查配额是否充足
-	if user.Quota-user.UsedQuota < amount {
-		return errors.ErrQuotaExceeded
-	}
-
-	// 扣除配额
+	// 扣除配额（原子操作，包含检查）
 	if err := s.repo.IncrementUsedQuota(ctx, userID, amount); err != nil {
 		s.logger.Error("Failed to deduct quota",
 			logger.Uint("user_id", userID),
 			logger.Int64("amount", amount),
 			logger.Error(err))
-		return errors.Wrap(err, 500002, "Failed to deduct quota")
+		return err
 	}
 
 	s.logger.Info("Quota deducted successfully",
