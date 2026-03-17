@@ -89,24 +89,23 @@ type kiroMessage struct {
 }
 
 type kiroUserMessage struct {
-	Content                 interface{}         `json:"content"`                          // string or []kiroContentPart for multimodal
-	ModelID                 string              `json:"modelId"`                          // Required: Kiro model ID
-	Origin                  string              `json:"origin"`                           // Required: "AI_EDITOR"
+	Content interface{} `json:"content"` // string (text content)
+	ModelID string `json:"modelId"` // Required: Kiro model ID
+	Origin string `json:"origin"` // Required: "AI_EDITOR"
+	Images []kiroImage `json:"images,omitempty"` // Optional: images (Kiro-account-manager format)
 	UserInputMessageContext *kiroMessageContext `json:"userInputMessageContext,omitempty"` // Optional: tools and tool results
 }
 
-// kiroContentPart represents a content part for multimodal support
-type kiroContentPart struct {
-	Type   string            `json:"type"` // text, image
-	Text   string            `json:"text,omitempty"`
-	Source *kiroImageSource  `json:"source,omitempty"`
+// kiroImage represents an image in Kiro format (Kiro-account-manager style)
+// Format: {"format": "jpeg", "source": {"bytes": "base64data"}}
+type kiroImage struct {
+	Format string           `json:"format"` // jpeg, png, gif, webp
+	Source kiroImageSource  `json:"source"`
 }
 
-// kiroImageSource represents an image source (similar to Anthropic)
+// kiroImageSource represents an image source in Kiro format
 type kiroImageSource struct {
-	Type      string `json:"type"`       // base64
-	MediaType string `json:"media_type"` // image/png, image/jpeg, etc.
-	Data      string `json:"data"`
+	Bytes string `json:"bytes"` // base64 data
 }
 
 type kiroAssistantMessage struct {
@@ -170,7 +169,9 @@ func (a *KiroAdapter) Call(ctx context.Context, req *ChatRequest) (*ChatResponse
 	}
 
 	// Create HTTP request
-	url := fmt.Sprintf("https://q.%s.amazonaws.com/generateAssistantResponse", a.region)
+	// Kiro uses CodeWhisperer endpoint for AI_EDITOR origin
+	// Reference: Kiro-account-manager uses codewhisperer.us-east-1.amazonaws.com
+	url := "https://codewhisperer.us-east-1.amazonaws.com/generateAssistantResponse"
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(reqBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -235,7 +236,9 @@ func (a *KiroAdapter) CallStream(ctx context.Context, req *ChatRequest) (*http.R
 	}
 
 	// Create HTTP request
-	url := fmt.Sprintf("https://q.%s.amazonaws.com/generateAssistantResponse", a.region)
+	// Kiro uses CodeWhisperer endpoint for AI_EDITOR origin
+	// Reference: Kiro-account-manager uses codewhisperer.us-east-1.amazonaws.com
+	url := "https://codewhisperer.us-east-1.amazonaws.com/generateAssistantResponse"
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(reqBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -289,17 +292,57 @@ func (a *KiroAdapter) CallStream(ctx context.Context, req *ChatRequest) (*http.R
 	return streamResp, nil
 }
 
+// kiroModelMapping maps model names to Kiro's short format model IDs
+// Reference: Kiro-account-manager implementation
+var kiroModelMapping = map[string]string{
+	// Claude 4.5 series
+	"claude-sonnet-4-5":    "claude-sonnet-4.5",
+	"claude-sonnet-4.5":    "claude-sonnet-4.5",
+	"claude-haiku-4-5":     "claude-haiku-4.5",
+	"claude-haiku-4.5":     "claude-haiku-4.5",
+	"claude-opus-4-5":      "claude-opus-4.5",
+	"claude-opus-4.5":      "claude-opus-4.5",
+	// Claude 4 series
+	"claude-sonnet-4":      "claude-sonnet-4",
+	"claude-sonnet-4-20250514": "claude-sonnet-4",
+	// Claude 3.5 series (map to Sonnet 4.5)
+	"claude-3-5-sonnet":    "claude-sonnet-4.5",
+	"claude-3-5-sonnet-20241022": "claude-sonnet-4.5",
+	"claude-3-opus":        "claude-sonnet-4.5",
+	"claude-3-sonnet":      "claude-sonnet-4",
+	"claude-3-haiku":       "claude-haiku-4.5",
+	// GPT compatibility (map to Sonnet 4.5)
+	"gpt-4":                "claude-sonnet-4.5",
+	"gpt-4o":               "claude-sonnet-4.5",
+	"gpt-4-turbo":          "claude-sonnet-4.5",
+	"gpt-3.5-turbo":        "claude-sonnet-4.5",
+}
+
+// mapToKiroModelID converts a model name to Kiro's short format model ID
+func mapToKiroModelID(model string) string {
+	lower := strings.ToLower(model)
+	// Check for exact match first
+	if mapped, ok := kiroModelMapping[lower]; ok {
+		return mapped
+	}
+	// Check for partial match
+	for key, value := range kiroModelMapping {
+		if strings.Contains(lower, key) {
+			return value
+		}
+	}
+	// Default to claude-sonnet-4.5
+	return "claude-sonnet-4.5"
+}
+
 // convertRequest converts unified ChatRequest to Kiro format
 // Following Kiro-account-manager implementation exactly
 func (a *KiroAdapter) convertRequest(req *ChatRequest) (*kiroRequest, error) {
 	conversationID := uuid.New().String()
 
-	// Get Kiro model ID from database mapping
-	kiroModelID, err := a.modelMapper.GetModelMapping(context.Background(), req.Model)
-	if err != nil {
-		// Fallback: use model name as-is if mapping not found
-		kiroModelID = req.Model
-	}
+	// Convert model name to Kiro's short format model ID
+	// Kiro API uses short format like "claude-sonnet-4.5", not AWS Bedrock format
+	kiroModelID := mapToKiroModelID(req.Model)
 
 	origin := "AI_EDITOR"
 
@@ -343,117 +386,76 @@ func (a *KiroAdapter) convertRequest(req *ChatRequest) (*kiroRequest, error) {
 	systemPromptMerged := false
 
 for i, msg := range nonSystemMessages {
-		if msg.Role == "user" {
-			// Check if content is multimodal (array of content parts)
-			var userContent interface{}
-			var textContent string
-			
-			switch v := msg.Content.(type) {
-			case string:
-				textContent = v
-				userContent = v
-			case []interface{}:
-				// Multimodal content - extract text and images
-				contentParts := make([]kiroContentPart, 0)
-				for _, part := range v {
-					if partMap, ok := part.(map[string]interface{}); ok {
-						partType, _ := partMap["type"].(string)
-						switch partType {
-						case "text":
-							if text, ok := partMap["text"].(string); ok {
-								contentParts = append(contentParts, kiroContentPart{
-									Type: "text",
-									Text: text,
-								})
-								textContent += text
-							}
-						case "image_url":
-							// OpenAI format: {"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}}
-							if imageURL, ok := partMap["image_url"].(map[string]interface{}); ok {
-								if url, ok := imageURL["url"].(string); ok {
-									// Parse data URL: data:image/png;base64,xxxxx
-									if strings.HasPrefix(url, "data:") {
-										mediaType, data := parseDataURL(url)
-										contentParts = append(contentParts, kiroContentPart{
-											Type: "image",
-											Source: &kiroImageSource{
-												Type:      "base64",
-												MediaType: mediaType,
-												Data:      data,
-											},
-										})
+	if msg.Role == "user" {
+		// Check if content is multimodal (array of content parts)
+		// Following Kiro-account-manager: extract text content and images separately
+		var textContent string
+		var images []kiroImage
+
+		switch v := msg.Content.(type) {
+		case string:
+			textContent = v
+		case []interface{}:
+			// Multimodal content - extract text and images (Kiro-account-manager style)
+			for _, part := range v {
+				if partMap, ok := part.(map[string]interface{}); ok {
+					partType, _ := partMap["type"].(string)
+					switch partType {
+					case "text":
+						if text, ok := partMap["text"].(string); ok {
+							textContent += text
+						}
+					case "image_url":
+						// OpenAI format: {"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}}
+						if imageURL, ok := partMap["image_url"].(map[string]interface{}); ok {
+							if url, ok := imageURL["url"].(string); ok {
+								// Parse data URL: data:image/png;base64,xxxxx
+								if strings.HasPrefix(url, "data:") {
+									if img := parseDataURLToKiroImage(url); img != nil {
+										images = append(images, *img)
 									}
 								}
 							}
-						case "image":
-							// Anthropic format: {"type": "image", "source": {"type": "base64", "media_type": "...", "data": "..."}}
-							if source, ok := partMap["source"].(map[string]interface{}); ok {
-								mediaType, _ := source["media_type"].(string)
-								data, _ := source["data"].(string)
-								contentParts = append(contentParts, kiroContentPart{
-									Type: "image",
-									Source: &kiroImageSource{
-										Type:      "base64",
-										MediaType: mediaType,
-										Data:      data,
-									},
-								})
+						}
+					case "image":
+						// Anthropic format: {"type": "image", "source": {"type": "base64", "media_type": "...", "data": "..."}}
+						if source, ok := partMap["source"].(map[string]interface{}); ok {
+							mediaType, _ := source["media_type"].(string)
+							data, _ := source["data"].(string)
+							if img := convertToKiroImage(mediaType, data); img != nil {
+								images = append(images, *img)
 							}
 						}
 					}
 				}
-				if len(contentParts) > 0 {
-					userContent = contentParts
-				} else {
-					userContent = "Continue"
-				}
-			default:
-				textContent = GetContentAsString(msg.Content)
-				userContent = textContent
 			}
+		default:
+			textContent = GetContentAsString(msg.Content)
+		}
 
-			// Merge system prompt into first user message (only for text content)
-			if !systemPromptMerged && systemPrompt != "" {
-				switch v := userContent.(type) {
-				case string:
-					userContent = fmt.Sprintf("%s\n\n%s", systemPrompt, v)
-				case []kiroContentPart:
-					// Prepend system prompt to first text part
-					for i, part := range v {
-						if part.Type == "text" {
-							v[i].Text = fmt.Sprintf("%s\n\n%s", systemPrompt, part.Text)
-							break
-						}
-					}
-					// If no text part, add one
-					hasText := false
-					for _, part := range v {
-						if part.Type == "text" {
-							hasText = true
-							break
-						}
-					}
-					if !hasText {
-						userContent = append([]kiroContentPart{{
-							Type: "text",
-							Text: systemPrompt,
-						}}, v...)
-					}
-				}
-				systemPromptMerged = true
-			}
+		// Merge system prompt into first user message
+		if !systemPromptMerged && systemPrompt != "" {
+			textContent = fmt.Sprintf("%s\n\n%s", systemPrompt, textContent)
+			systemPromptMerged = true
+		}
 
-			if userContent == "" {
-				userContent = "Continue"
-			}
+		if textContent == "" {
+			textContent = "Continue"
+		}
 
-			allMessages = append(allMessages, kiroMessage{
-				UserInputMessage: &kiroUserMessage{
-					Content: userContent,
-					ModelID: kiroModelID,
-					Origin: origin,
-				},
-			})
+		userMsg := &kiroUserMessage{
+			Content: textContent,
+			ModelID: kiroModelID,
+			Origin:  origin,
+		}
+		// Add images if present (Kiro-account-manager format)
+		if len(images) > 0 {
+			userMsg.Images = images
+		}
+
+		allMessages = append(allMessages, kiroMessage{
+			UserInputMessage: userMsg,
+		})
 } else if msg.Role == "assistant" {
 			// Kiro API requires content to be non-empty
 			assistantContent := GetContentAsString(msg.Content)
@@ -557,7 +559,14 @@ for i, msg := range nonSystemMessages {
 
 	// If system prompt not merged yet, add to current message
 	if !systemPromptMerged && systemPrompt != "" {
-		currentMsg.UserInputMessage.Content = fmt.Sprintf("%s\n\n%s", systemPrompt, currentMsg.UserInputMessage.Content)
+		switch c := currentMsg.UserInputMessage.Content.(type) {
+		case string:
+			currentMsg.UserInputMessage.Content = fmt.Sprintf("%s\n\n%s", systemPrompt, c)
+		default:
+			// For other content types, convert to string and prepend
+			contentStr := GetContentAsString(currentMsg.UserInputMessage.Content)
+			currentMsg.UserInputMessage.Content = fmt.Sprintf("%s\n\n%s", systemPrompt, contentStr)
+		}
 	}
 
 	// Convert tools
@@ -828,7 +837,15 @@ func removeEmptyUserMessages(messages []kiroMessage) []kiroMessage {
 
 		// Keep user messages with content or tool results
 		if msg.UserInputMessage != nil {
-			hasContent := strings.TrimSpace(msg.UserInputMessage.Content) != ""
+			hasContent := false
+			switch c := msg.UserInputMessage.Content.(type) {
+			case string:
+				hasContent = strings.TrimSpace(c) != ""
+			default:
+				// Check if content is non-empty
+				contentStr := GetContentAsString(msg.UserInputMessage.Content)
+				hasContent = strings.TrimSpace(contentStr) != ""
+			}
 			hasToolResults := msg.UserInputMessage.UserInputMessageContext != nil &&
 				len(msg.UserInputMessage.UserInputMessageContext.ToolResults) > 0
 
@@ -906,20 +923,27 @@ func (a *KiroAdapter) convertResponse(resp *kiroResponse, model string) *ChatRes
 }
 
 // setKiroHeaders sets Kiro-specific headers
+// Reference: Kiro-account-manager implementation
 func (a *KiroAdapter) setKiroHeaders(req *http.Request) {
 	// Generate unique invocation ID for each request
 	invocationID := uuid.New().String()
-	
+
+	// Kiro version (use a recent version from Kiro-account-manager)
+	kiroVersion := "0.6.18"
+
+	// User-Agent headers matching Kiro IDE
+	userAgent := fmt.Sprintf("aws-sdk-js/1.0.18 ua/2.1 os/windows lang/js md/nodejs#20.16.0 api/codewhispererstreaming#1.0.18 m/E KiroIDE-%s-%s", kiroVersion, a.machineID)
+	amzUserAgent := fmt.Sprintf("aws-sdk-js/1.0.18 KiroIDE-%s %s", kiroVersion, a.machineID)
+
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+a.accessToken)
-	req.Header.Set("amz-sdk-invocation-id", invocationID) // Required!
-	req.Header.Set("x-amzn-kiro-agent-mode", "vibe")
-	req.Header.Set("x-amz-user-agent", fmt.Sprintf("aws-sdk-js/1.0.0 KiroIDE-0.8.140-%s", a.machineID))
-	req.Header.Set("user-agent", "aws-sdk-js/1.0.0 ua/2.1 os/linux lang/js md/nodejs#18.0.0 api/codewhispererruntime#1.0.0 m/E")
+	req.Header.Set("amz-sdk-invocation-id", invocationID)
+	req.Header.Set("x-amz-user-agent", amzUserAgent)
+	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("amz-sdk-request", "attempt=1; max=1")
 	req.Header.Set("Connection", "close")
-	req.Header.Set("Accept-Encoding", "gzip, deflate") // Accept gzip encoding
+	req.Header.Set("Accept-Encoding", "gzip, deflate")
 }
 
 // parseEventStreamChunk parses AWS EventStream binary format response
@@ -1491,4 +1515,75 @@ func parseSSEStream(reader *bufio.Reader) (string, error) {
 	}
 
 	return fullContent.String(), nil
+}
+
+// parseDataURLToKiroImage converts a data URL to Kiro image format
+// Input: data:image/png;base64,xxxxx
+// Output: &kiroImage{Format: "png", Source: {Bytes: "xxxxx"}}
+func parseDataURLToKiroImage(url string) *kiroImage {
+	mediaType, data := parseDataURL(url)
+	if mediaType == "" || data == "" {
+		return nil
+	}
+
+	// Convert media type to format (e.g., "image/png" -> "png")
+	format := mediaTypeToFormat(mediaType)
+	if format == "" {
+		return nil
+	}
+
+	return &kiroImage{
+		Format: format,
+		Source: kiroImageSource{
+			Bytes: data,
+		},
+	}
+}
+
+// convertToKiroImage converts media type and base64 data to Kiro image format
+func convertToKiroImage(mediaType, data string) *kiroImage {
+	if mediaType == "" || data == "" {
+		return nil
+	}
+
+	format := mediaTypeToFormat(mediaType)
+	if format == "" {
+		return nil
+	}
+
+	return &kiroImage{
+		Format: format,
+		Source: kiroImageSource{
+			Bytes: data,
+		},
+	}
+}
+
+// mediaTypeToFormat converts media type to Kiro format string
+func mediaTypeToFormat(mediaType string) string {
+	// Handle common media types
+	switch mediaType {
+	case "image/jpeg", "image/jpg":
+		return "jpeg"
+	case "image/png":
+		return "png"
+	case "image/gif":
+		return "gif"
+	case "image/webp":
+		return "webp"
+	default:
+		// Try to extract format from media type
+		if strings.HasPrefix(mediaType, "image/") {
+			format := strings.TrimPrefix(mediaType, "image/")
+			// Validate format
+			switch format {
+			case "jpeg", "jpg", "png", "gif", "webp":
+				if format == "jpg" {
+					return "jpeg"
+				}
+				return format
+			}
+		}
+		return ""
+	}
 }
