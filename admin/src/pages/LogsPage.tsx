@@ -16,6 +16,10 @@ import {
   ReloadOutlined,
   DownloadOutlined,
   EyeOutlined,
+  FileTextOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { logService } from '../services/logService';
@@ -219,8 +223,78 @@ const LogsPage: React.FC = () => {
     setPage(1);
   };
 
+  // 计算统计数据
+  const stats = {
+    total: data?.total || 0,
+    success: data?.logs.filter(log => log.status_code >= 200 && log.status_code < 300).length || 0,
+    error: data?.logs.filter(log => log.status_code >= 400).length || 0,
+    avgResponseTime: data?.logs.length 
+      ? Math.round(data.logs.reduce((sum, log) => sum + log.response_time, 0) / data.logs.length)
+      : 0,
+    totalTokens: data?.logs.reduce((sum, log) => sum + log.tokens_used, 0) || 0,
+  };
+
   return (
     <PageContainer title="请求日志" description="查看和分析 API 请求记录">
+      {/* 统计卡片 */}
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+        <div className="glass-card p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-text-secondary text-sm mb-1">总请求数</div>
+              <div className="text-2xl font-bold text-white">{stats.total.toLocaleString()}</div>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+              <FileTextOutlined className="text-2xl text-primary" />
+            </div>
+          </div>
+        </div>
+        <div className="glass-card p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-text-secondary text-sm mb-1">成功请求</div>
+              <div className="text-2xl font-bold text-green-400">{stats.success.toLocaleString()}</div>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-green-500/10 flex items-center justify-center">
+              <CheckCircleOutlined className="text-2xl text-green-400" />
+            </div>
+          </div>
+        </div>
+        <div className="glass-card p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-text-secondary text-sm mb-1">失败请求</div>
+              <div className="text-2xl font-bold text-red-400">{stats.error.toLocaleString()}</div>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-red-500/10 flex items-center justify-center">
+              <CloseCircleOutlined className="text-2xl text-red-400" />
+            </div>
+          </div>
+        </div>
+        <div className="glass-card p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-text-secondary text-sm mb-1">平均响应</div>
+              <div className="text-2xl font-bold text-yellow-400">{stats.avgResponseTime}ms</div>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-yellow-500/10 flex items-center justify-center">
+              <ThunderboltOutlined className="text-2xl text-yellow-400" />
+            </div>
+          </div>
+        </div>
+        <div className="glass-card p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-text-secondary text-sm mb-1">总Token数</div>
+              <div className="text-2xl font-bold text-blue-400">{stats.totalTokens.toLocaleString()}</div>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center">
+              <FileTextOutlined className="text-2xl text-blue-400" />
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="glass-card p-6">
         {/* 筛选栏 */}
         <Space style={{ marginBottom: 16 }} wrap>

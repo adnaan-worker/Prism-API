@@ -25,6 +25,8 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   DatabaseOutlined,
+  DownloadOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiConfigService } from '../services/apiConfigService';
@@ -576,16 +578,44 @@ const ApiConfigsPage: React.FC = () => {
   // 批量删除
   const handleBatchDelete = () => {
     if (selectedRowKeys.length === 0) {
-      message.warning('请选择要删除的配置');
+      message.warning('请先选择要删除的配置');
       return;
     }
     Modal.confirm({
-      title: '批量删除确认',
+      title: '批量删除配置',
       content: `确定要删除选中的 ${selectedRowKeys.length} 个配置吗？`,
       onOk: () => {
-        batchDeleteMutation.mutate(selectedRowKeys as number[]);
+        batchDeleteMutation.mutate(selectedRowKeys.map(Number));
       },
     });
+  };
+
+  // 导出配置
+  const handleExport = () => {
+    if (!data?.configs) return;
+    
+    const csvContent = [
+      ['ID', '名称', '类型', '配置类型', 'Base URL', '模型数量', '优先级', '权重', '状态', '创建时间'].join(','),
+      ...data.configs.map(config => [
+        config.id,
+        config.name,
+        config.type,
+        config.config_type || 'direct',
+        config.base_url || '',
+        config.models.length,
+        config.priority,
+        config.weight,
+        config.is_active ? '启用' : '禁用',
+        config.created_at,
+      ].join(',')),
+    ].join('\n');
+
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `api_configs_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    message.success('导出成功');
   };
 
   // 行选择配置
@@ -596,40 +626,108 @@ const ApiConfigsPage: React.FC = () => {
 
   return (
     <PageContainer title="API 配置" description="管理 AI 服务提供商的接入配置">
+      {/* 统计卡片 */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="glass-card p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-text-secondary text-sm mb-1">总配置数</div>
+              <div className="text-2xl font-bold text-white">{data?.total || 0}</div>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+              <ApiOutlined className="text-2xl text-primary" />
+            </div>
+          </div>
+        </div>
+        <div className="glass-card p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-text-secondary text-sm mb-1">启用配置</div>
+              <div className="text-2xl font-bold text-green-400">
+                {data?.configs.filter(c => c.is_active).length || 0}
+              </div>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-green-500/10 flex items-center justify-center">
+              <CheckCircleOutlined className="text-2xl text-green-400" />
+            </div>
+          </div>
+        </div>
+        <div className="glass-card p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-text-secondary text-sm mb-1">账号池配置</div>
+              <div className="text-2xl font-bold text-purple-400">
+                {data?.configs.filter(c => c.config_type === 'account_pool').length || 0}
+              </div>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center">
+              <DatabaseOutlined className="text-2xl text-purple-400" />
+            </div>
+          </div>
+        </div>
+        <div className="glass-card p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-text-secondary text-sm mb-1">支持模型</div>
+              <div className="text-2xl font-bold text-blue-400">
+                {data?.configs.reduce((sum, c) => sum + c.models.length, 0) || 0}
+              </div>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center">
+              <ThunderboltOutlined className="text-2xl text-blue-400" />
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="glass-card p-6">
         {/* 操作栏 */}
-        <Space style={{ marginBottom: 16 }} wrap><TableToolbar
-          onAdd={handleAdd}
-          addText="添加配置"
-          onRefresh={() => refetch()}
-          extra={
-            <Space wrap>
-              <Button
-                danger
-                icon={<DeleteOutlined />}
-                onClick={handleBatchDelete}
-                disabled={selectedRowKeys.length === 0}
-              >
-                批量删除 ({selectedRowKeys.length})
-              </Button>
-              <Select
-                placeholder="筛选类型"
-                allowClear
-                style={{ width: 150 }}
-                onChange={(value) => {
-                  setTypeFilter(value);
-                  resetPagination();
-                }}
-              >
-                <Option value="openai">OpenAI</Option>
-                <Option value="anthropic">Anthropic</Option>
-                <Option value="gemini">Gemini</Option>
-                <Option value="kiro">Kiro</Option>
-                <Option value="custom">Custom</Option>
-              </Select>
-            </Space>
-          }
-        /></Space>
+        <Space style={{ marginBottom: 16 }} wrap>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={handleAdd}
+          >
+            添加配置
+          </Button>
+          {selectedRowKeys.length > 0 && (
+            <Button
+              danger
+              icon={<DeleteOutlined />}
+              onClick={handleBatchDelete}
+            >
+              批量删除 ({selectedRowKeys.length})
+            </Button>
+          )}
+          <Select
+            placeholder="筛选类型"
+            allowClear
+            style={{ width: 150 }}
+            onChange={(value) => {
+              setTypeFilter(value);
+              resetPagination();
+            }}
+          >
+            <Option value="openai">OpenAI</Option>
+            <Option value="anthropic">Anthropic</Option>
+            <Option value="gemini">Gemini</Option>
+            <Option value="kiro">Kiro</Option>
+            <Option value="custom">Custom</Option>
+          </Select>
+          <Button
+            icon={<DownloadOutlined />}
+            onClick={handleExport}
+            disabled={!data?.configs || data.configs.length === 0}
+          >
+            导出
+          </Button>
+          <Button
+            icon={<ReloadOutlined />}
+            onClick={() => refetch()}
+          >
+            刷新
+          </Button>
+        </Space>
 
 
         {/* 配置列表表格 */}

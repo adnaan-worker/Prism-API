@@ -21,6 +21,9 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   QuestionCircleOutlined,
+  DownloadOutlined,
+  ThunderboltOutlined,
+  ApiOutlined,
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { loadBalancerService } from '../services/loadBalancerService';
@@ -219,6 +222,34 @@ const LoadBalancerPage: React.FC = () => {
     });
   };
 
+  // 导出端点配置
+  const handleExport = () => {
+    if (!endpoints || !selectedModel) return;
+    
+    const csvContent = [
+      ['模型', '配置名称', '类型', 'Base URL', '优先级', '权重', '健康状态', '响应时间(ms)', '成功率(%)', '状态'].join(','),
+      ...endpoints.map(ep => [
+        selectedModel,
+        ep.config_name,
+        ep.type,
+        ep.base_url,
+        ep.priority,
+        ep.weight,
+        ep.health_status,
+        ep.response_time || '-',
+        ep.success_rate || '-',
+        ep.is_active ? '启用' : '禁用',
+      ].join(',')),
+    ].join('\n');
+
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `load_balancer_${selectedModel}_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    message.success('导出成功');
+  };
+
   // 计算统计数据
   const stats = {
     total: endpoints?.length || 0,
@@ -235,6 +266,54 @@ const LoadBalancerPage: React.FC = () => {
 
   return (
     <PageContainer title="负载均衡" description="管理模型端点分配和均衡策略">
+      {/* 总体统计卡片 */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="glass-card p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-text-secondary text-sm mb-1">可用模型</div>
+              <div className="text-2xl font-bold text-white">{models?.length || 0}</div>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+              <ThunderboltOutlined className="text-2xl text-primary" />
+            </div>
+          </div>
+        </div>
+        <div className="glass-card p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-text-secondary text-sm mb-1">负载均衡配置</div>
+              <div className="text-2xl font-bold text-blue-400">{configs?.length || 0}</div>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center">
+              <SettingOutlined className="text-2xl text-blue-400" />
+            </div>
+          </div>
+        </div>
+        <div className="glass-card p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-text-secondary text-sm mb-1">总端点数</div>
+              <div className="text-2xl font-bold text-purple-400">{stats.total}</div>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center">
+              <ApiOutlined className="text-2xl text-purple-400" />
+            </div>
+          </div>
+        </div>
+        <div className="glass-card p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-text-secondary text-sm mb-1">健康端点</div>
+              <div className="text-2xl font-bold text-green-400">{stats.healthy}</div>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-green-500/10 flex items-center justify-center">
+              <CheckCircleOutlined className="text-2xl text-green-400" />
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* 模型选择和配置 */}
       <div className="glass-card p-6 mb-6">
         <Space size="large" wrap className="w-full justify-between">
@@ -277,6 +356,14 @@ const LoadBalancerPage: React.FC = () => {
                   </Button>
                 </Space>
               </div>
+
+              <Button
+                icon={<DownloadOutlined />}
+                onClick={handleExport}
+                disabled={!endpoints || endpoints.length === 0}
+              >
+                导出
+              </Button>
 
               <Button
                 icon={<ReloadOutlined />}
