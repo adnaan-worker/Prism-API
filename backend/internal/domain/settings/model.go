@@ -54,10 +54,13 @@ const (
 	KeyDefaultQuotaMonthly = "default_quota.monthly"
 	KeyDefaultQuotaTotal   = "default_quota.total"
 
-	// 榛樿閫熺巼闄愬埗
+	// 榛樿閫熺巼闄愬埗
 	KeyDefaultRateLimitPerMinute = "default_rate_limit.per_minute"
 	KeyDefaultRateLimitPerHour   = "default_rate_limit.per_hour"
 	KeyDefaultRateLimitPerDay    = "default_rate_limit.per_day"
+
+	// 娉ㄥ唽閰嶇疆
+	KeyRegistrationEnabled = "registration.enabled"
 )
 
 // 璁剧疆绫诲瀷甯搁噺

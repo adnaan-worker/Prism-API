@@ -89,10 +89,24 @@ type kiroMessage struct {
 }
 
 type kiroUserMessage struct {
-	Content                 string              `json:"content"`
-	ModelID                 string              `json:"modelId"`                           // Required: Kiro model ID
-	Origin                  string              `json:"origin"`                            // Required: "AI_EDITOR"
+	Content                 interface{}         `json:"content"`                          // string or []kiroContentPart for multimodal
+	ModelID                 string              `json:"modelId"`                          // Required: Kiro model ID
+	Origin                  string              `json:"origin"`                           // Required: "AI_EDITOR"
 	UserInputMessageContext *kiroMessageContext `json:"userInputMessageContext,omitempty"` // Optional: tools and tool results
+}
+
+// kiroContentPart represents a content part for multimodal support
+type kiroContentPart struct {
+	Type   string            `json:"type"` // text, image
+	Text   string            `json:"text,omitempty"`
+	Source *kiroImageSource  `json:"source,omitempty"`
+}
+
+// kiroImageSource represents an image source (similar to Anthropic)
+type kiroImageSource struct {
+	Type      string `json:"type"`       // base64
+	MediaType string `json:"media_type"` // image/png, image/jpeg, etc.
+	Data      string `json:"data"`
 }
 
 type kiroAssistantMessage struct {
@@ -330,11 +344,102 @@ func (a *KiroAdapter) convertRequest(req *ChatRequest) (*kiroRequest, error) {
 
 for i, msg := range nonSystemMessages {
 		if msg.Role == "user" {
-			userContent := GetContentAsString(msg.Content)
+			// Check if content is multimodal (array of content parts)
+			var userContent interface{}
+			var textContent string
+			
+			switch v := msg.Content.(type) {
+			case string:
+				textContent = v
+				userContent = v
+			case []interface{}:
+				// Multimodal content - extract text and images
+				contentParts := make([]kiroContentPart, 0)
+				for _, part := range v {
+					if partMap, ok := part.(map[string]interface{}); ok {
+						partType, _ := partMap["type"].(string)
+						switch partType {
+						case "text":
+							if text, ok := partMap["text"].(string); ok {
+								contentParts = append(contentParts, kiroContentPart{
+									Type: "text",
+									Text: text,
+								})
+								textContent += text
+							}
+						case "image_url":
+							// OpenAI format: {"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}}
+							if imageURL, ok := partMap["image_url"].(map[string]interface{}); ok {
+								if url, ok := imageURL["url"].(string); ok {
+									// Parse data URL: data:image/png;base64,xxxxx
+									if strings.HasPrefix(url, "data:") {
+										mediaType, data := parseDataURL(url)
+										contentParts = append(contentParts, kiroContentPart{
+											Type: "image",
+											Source: &kiroImageSource{
+												Type:      "base64",
+												MediaType: mediaType,
+												Data:      data,
+											},
+										})
+									}
+								}
+							}
+						case "image":
+							// Anthropic format: {"type": "image", "source": {"type": "base64", "media_type": "...", "data": "..."}}
+							if source, ok := partMap["source"].(map[string]interface{}); ok {
+								mediaType, _ := source["media_type"].(string)
+								data, _ := source["data"].(string)
+								contentParts = append(contentParts, kiroContentPart{
+									Type: "image",
+									Source: &kiroImageSource{
+										Type:      "base64",
+										MediaType: mediaType,
+										Data:      data,
+									},
+								})
+							}
+						}
+					}
+				}
+				if len(contentParts) > 0 {
+					userContent = contentParts
+				} else {
+					userContent = "Continue"
+				}
+			default:
+				textContent = GetContentAsString(msg.Content)
+				userContent = textContent
+			}
 
-			// Merge system prompt into first user message
+			// Merge system prompt into first user message (only for text content)
 			if !systemPromptMerged && systemPrompt != "" {
-				userContent = fmt.Sprintf("%s\n\n%s", systemPrompt, userContent)
+				switch v := userContent.(type) {
+				case string:
+					userContent = fmt.Sprintf("%s\n\n%s", systemPrompt, v)
+				case []kiroContentPart:
+					// Prepend system prompt to first text part
+					for i, part := range v {
+						if part.Type == "text" {
+							v[i].Text = fmt.Sprintf("%s\n\n%s", systemPrompt, part.Text)
+							break
+						}
+					}
+					// If no text part, add one
+					hasText := false
+					for _, part := range v {
+						if part.Type == "text" {
+							hasText = true
+							break
+						}
+					}
+					if !hasText {
+						userContent = append([]kiroContentPart{{
+							Type: "text",
+							Text: systemPrompt,
+						}}, v...)
+					}
+				}
 				systemPromptMerged = true
 			}
 

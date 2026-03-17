@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"api-aggregator/backend/internal/domain/settings"
 	"api-aggregator/backend/internal/domain/user"
 	"api-aggregator/backend/pkg/crypto"
 	"api-aggregator/backend/pkg/errors"
@@ -10,6 +11,11 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 )
+
+// SettingsGetter 定义获取注册配置的接口
+type SettingsGetter interface {
+	GetRegistrationConfig(ctx context.Context) (*settings.RegistrationConfigResponse, error)
+}
 
 // Service 认证服务接口
 type Service interface {
@@ -24,26 +30,35 @@ type Service interface {
 type service struct {
 	repo           Repository
 	jwtSecret      string
-	defaultQuota   int64
-	registrationEn bool
+	settingsGetter SettingsGetter
 	logger         logger.Logger
 }
 
 // NewService 创建认证服务
-func NewService(repo Repository, jwtSecret string, defaultQuota int64, registrationEnabled bool, logger logger.Logger) Service {
+func NewService(repo Repository, jwtSecret string, settingsGetter SettingsGetter, logger logger.Logger) Service {
 	return &service{
 		repo:           repo,
 		jwtSecret:      jwtSecret,
-		defaultQuota:   defaultQuota,
-		registrationEn: registrationEnabled,
+		settingsGetter: settingsGetter,
 		logger:         logger,
 	}
 }
 
 // Register 用户注册
 func (s *service) Register(ctx context.Context, req *RegisterRequest) (*RegisterResponse, error) {
+	// 从 settings 获取动态注册配置
+	regConfig, err := s.settingsGetter.GetRegistrationConfig(ctx)
+	if err != nil {
+		s.logger.Warn("Failed to get registration config, using defaults", logger.Error(err))
+		// 使用默认值
+		regConfig = &settings.RegistrationConfigResponse{
+			Enabled:      true,
+			DefaultQuota: 10000,
+		}
+	}
+
 	// 检查注册是否开启
-	if !s.registrationEn {
+	if !regConfig.Enabled {
 		return nil, errors.New(403003, "Registration is currently disabled")
 	}
 
@@ -74,12 +89,12 @@ func (s *service) Register(ctx context.Context, req *RegisterRequest) (*Register
 		return nil, errors.Wrap(err, 500005, "Failed to hash password")
 	}
 
-	// 创建用户
+	// 创建用户 - 使用动态配置的默认配额
 	newUser := &user.User{
 		Username:     req.Username,
 		Email:        req.Email,
 		PasswordHash: hashedPassword,
-		Quota:        s.defaultQuota, // 使用配置的默认配额
+		Quota:        regConfig.DefaultQuota,
 		UsedQuota:    0,
 		IsAdmin:      false,
 		Status:       "active",
@@ -94,9 +109,10 @@ func (s *service) Register(ctx context.Context, req *RegisterRequest) (*Register
 
 	s.logger.Info("User registered successfully",
 		logger.Uint("user_id", newUser.ID),
-		logger.String("username", newUser.Username))
+		logger.String("username", newUser.Username),
+		logger.Int64("quota", regConfig.DefaultQuota))
 
-	return &RegisterResponse{
+return &RegisterResponse{
 		User: s.toUserInfo(newUser),
 	}, nil
 }

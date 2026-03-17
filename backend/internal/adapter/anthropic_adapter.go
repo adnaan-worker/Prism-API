@@ -74,11 +74,18 @@ type anthropicResponse struct {
 }
 
 type anthropicContent struct {
-	Type  string                 `json:"type"` // text, tool_use, tool_result
-	Text  string                 `json:"text,omitempty"`
-	ID    string                 `json:"id,omitempty"`
-	Name  string                 `json:"name,omitempty"`
-	Input map[string]interface{} `json:"input,omitempty"`
+	Type   string                 `json:"type"` // text, image, tool_use, tool_result
+	Text   string                 `json:"text,omitempty"`
+	Source *anthropicImageSource  `json:"source,omitempty"` // for image type
+	ID     string                 `json:"id,omitempty"`
+	Name   string                 `json:"name,omitempty"`
+	Input  map[string]interface{} `json:"input,omitempty"`
+}
+
+type anthropicImageSource struct {
+	Type      string `json:"type"`       // base64
+	MediaType string `json:"media_type"` // image/png, image/jpeg, etc.
+	Data      string `json:"data"`
 }
 
 type anthropicUsage struct {
@@ -234,10 +241,71 @@ func (a *AnthropicAdapter) convertMessages(messages []Message) ([]anthropicMessa
 					Content: contents,
 				})
 			} else {
-				// Regular text message
+				// Check if content is multimodal
+				var content interface{}
+				switch v := msg.Content.(type) {
+				case string:
+					content = v
+				case []interface{}:
+					// Multimodal content - convert to Anthropic format
+					contents := make([]anthropicContent, 0)
+					for _, part := range v {
+						if partMap, ok := part.(map[string]interface{}); ok {
+							partType, _ := partMap["type"].(string)
+							switch partType {
+							case "text":
+								if text, ok := partMap["text"].(string); ok {
+									contents = append(contents, anthropicContent{
+										Type: "text",
+										Text: text,
+									})
+								}
+							case "image_url":
+								// OpenAI format: {"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}}
+								if imageURL, ok := partMap["image_url"].(map[string]interface{}); ok {
+									if url, ok := imageURL["url"].(string); ok {
+										mediaType, data := parseDataURL(url)
+										if mediaType != "" && data != "" {
+											contents = append(contents, anthropicContent{
+												Type: "image",
+												Source: &anthropicImageSource{
+													Type:      "base64",
+													MediaType: mediaType,
+													Data:      data,
+												},
+											})
+										}
+									}
+								}
+							case "image":
+								// Already Anthropic format
+								if source, ok := partMap["source"].(map[string]interface{}); ok {
+									mediaType, _ := source["media_type"].(string)
+									data, _ := source["data"].(string)
+									contents = append(contents, anthropicContent{
+										Type: "image",
+										Source: &anthropicImageSource{
+											Type:      "base64",
+											MediaType: mediaType,
+											Data:      data,
+										},
+									})
+								}
+							}
+						}
+					}
+					if len(contents) > 0 {
+						content = contents
+					} else {
+						content = contentStr
+					}
+				default:
+					content = contentStr
+				}
+
 				anthropicMessages = append(anthropicMessages, anthropicMessage{
 					Role:    msg.Role,
-					Content: contentStr,
+					Content: content,
 				})
 			}
 		}

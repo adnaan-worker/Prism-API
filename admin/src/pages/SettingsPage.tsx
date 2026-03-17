@@ -37,6 +37,7 @@ import {
   ExperimentOutlined,
   ClockCircleOutlined,
   UserOutlined,
+  TeamOutlined,
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { cacheService } from '../services/cacheService';
@@ -45,6 +46,7 @@ import {
   type RuntimeConfig,
   type DefaultQuotaConfig,
   type DefaultRateLimitConfig,
+  type RegistrationConfig,
 } from '../services/settingsService';
 import PageContainer from '../components/PageContainer';
 import { formatNumber } from '../utils/format';
@@ -554,6 +556,7 @@ const SecurityPanel: React.FC = () => {
   const [passwordForm] = Form.useForm();
   const [quotaForm] = Form.useForm();
   const [rateLimitForm] = Form.useForm();
+  const [registrationForm] = Form.useForm();
 
   // 获取默认配额
   const { data: quotaConfig, isError: quotaError } = useQuery({
@@ -569,6 +572,13 @@ const SecurityPanel: React.FC = () => {
     retry: 1,
   });
 
+  // 获取注册配置
+  const { data: registrationConfig, isError: registrationError } = useQuery({
+    queryKey: ['registration-config'],
+    queryFn: settingsService.getRegistrationConfig,
+    retry: 1,
+  });
+
   // 同步远程数据到表单
   useEffect(() => {
     if (quotaConfig) {
@@ -581,6 +591,12 @@ const SecurityPanel: React.FC = () => {
       rateLimitForm.setFieldsValue(rateLimitConfig);
     }
   }, [rateLimitConfig, rateLimitForm]);
+
+  useEffect(() => {
+    if (registrationConfig) {
+      registrationForm.setFieldsValue(registrationConfig);
+    }
+  }, [registrationConfig, registrationForm]);
 
   // 修改密码
   const changePasswordMutation = useMutation({
@@ -616,6 +632,17 @@ const SecurityPanel: React.FC = () => {
     },
   });
 
+  // 更新注册配置
+  const updateRegistrationMutation = useMutation({
+    mutationFn: settingsService.updateRegistrationConfig,
+    onSuccess: () => {
+      message.success('注册配置已更新');
+    },
+    onError: () => {
+      message.error('更新注册配置失败');
+    },
+  });
+
   const handleChangePassword = (values: { old_password: string; new_password: string; confirm_password: string }) => {
     changePasswordMutation.mutate({
       old_password: values.old_password,
@@ -631,6 +658,10 @@ const SecurityPanel: React.FC = () => {
     updateRateLimitMutation.mutate(values);
   };
 
+  const handleUpdateRegistration = (values: RegistrationConfig) => {
+    updateRegistrationMutation.mutate(values);
+  };
+
   const apiUnavailable = quotaError && rateLimitError;
 
   return (
@@ -644,6 +675,61 @@ const SecurityPanel: React.FC = () => {
           style={{ marginBottom: 24 }}
         />
       )}
+
+      {/* 注册配置 */}
+      <div className="glass-card p-6 mb-6">
+        <div className="flex items-center gap-2 mb-4 text-lg font-medium text-text-primary">
+          <TeamOutlined />
+          <span>注册配置</span>
+        </div>
+        <Paragraph type="secondary" style={{ marginBottom: 16 }}>
+          控制新用户注册开关和初始配额。关闭注册后，新用户将无法注册账号。
+        </Paragraph>
+        <Form
+          form={registrationForm}
+          layout="vertical"
+          onFinish={handleUpdateRegistration}
+          initialValues={{
+            enabled: registrationConfig?.enabled ?? true,
+            default_quota: registrationConfig?.default_quota ?? 10000,
+          }}
+          style={{ maxWidth: 480 }}
+        >
+          <Form.Item
+            name="enabled"
+            label="开放注册"
+            valuePropName="checked"
+          >
+            <Switch
+              checkedChildren="开启"
+              unCheckedChildren="关闭"
+            />
+          </Form.Item>
+          <Form.Item
+            name="default_quota"
+            label="新用户初始配额"
+            rules={[{ required: true, message: '请输入配额' }]}
+          >
+            <InputNumber
+              min={0}
+              step={1000}
+              style={{ width: '100%' }}
+              addonAfter="credits"
+              placeholder="10000"
+            />
+          </Form.Item>
+          <Form.Item>
+            <Button
+              type="primary"
+              htmlType="submit"
+              icon={<SaveOutlined />}
+              loading={updateRegistrationMutation.isPending}
+            >
+              保存配置
+            </Button>
+          </Form.Item>
+        </Form>
+      </div>
 
       {/* 修改管理员密码 */}
       <div className="glass-card p-6 mb-6">

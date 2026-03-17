@@ -180,6 +180,45 @@ func (h *Handler) UpdateDefaultRateLimit(c *gin.Context) {
 		response.HandleError(c, err)
 		return
 	}
+response.Success(c, rateLimit)
+}
 
-	response.Success(c, rateLimit)
+// GetRegistrationConfig 获取注册配置
+// @Summary 获取注册配置
+// @Tags Settings
+// @Produce json
+// @Success 200 {object} RegistrationConfigResponse
+// @Router /api/v1/admin/settings/registration [get]
+func (h *Handler) GetRegistrationConfig(c *gin.Context) {
+	config, err := h.service.GetRegistrationConfig(c.Request.Context())
+	if err != nil {
+		response.HandleError(c, err)
+		return
+	}
+
+	response.Success(c, config)
+}
+
+// UpdateRegistrationConfig 更新注册配置
+// @Summary 更新注册配置
+// @Tags Settings
+// @Accept json
+// @Produce json
+// @Param request body UpdateRegistrationConfigRequest true "更新请求"
+// @Success 200 {object} RegistrationConfigResponse
+// @Router /api/v1/admin/settings/registration [put]
+func (h *Handler) UpdateRegistrationConfig(c *gin.Context) {
+	var req UpdateRegistrationConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.ValidationError(c, err)
+		return
+	}
+
+	config, err := h.service.UpdateRegistrationConfig(c.Request.Context(), &req)
+	if err != nil {
+		response.HandleError(c, err)
+		return
+	}
+
+	response.Success(c, config)
 }

@@ -49,6 +49,12 @@ export interface DefaultRateLimitConfig {
   requests_per_day: number;
 }
 
+/** 注册配置 */
+export interface RegistrationConfig {
+  enabled: boolean;
+  default_quota: number;
+}
+
 // ========== API 调用 ==========
 
 export const settingsService = {
@@ -102,6 +108,20 @@ export const settingsService = {
   /** 更新默认速率限制 */
   updateDefaultRateLimit: async (data: DefaultRateLimitConfig): Promise<DefaultRateLimitConfig> => {
     const response = await apiClient.put<DefaultRateLimitConfig>('/admin/settings/default-rate-limit', data);
+    return response.data;
+  },
+
+  // ---- 注册配置 ----
+
+  /** 获取注册配置 */
+  getRegistrationConfig: async (): Promise<RegistrationConfig> => {
+    const response = await apiClient.get<RegistrationConfig>('/admin/settings/registration');
+    return response.data;
+  },
+
+  /** 更新注册配置 */
+  updateRegistrationConfig: async (data: Partial<RegistrationConfig>): Promise<RegistrationConfig> => {
+    const response = await apiClient.put<RegistrationConfig>('/admin/settings/registration', data);
     return response.data;
   },
 };

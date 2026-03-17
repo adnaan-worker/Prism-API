@@ -66,6 +66,18 @@ type UpdateDefaultRateLimitRequest struct {
 	RequestsPerDay    *int `json:"requests_per_day"`
 }
 
+// RegistrationConfigResponse 注册配置响应
+type RegistrationConfigResponse struct {
+	Enabled      bool  `json:"enabled"`
+	DefaultQuota int64 `json:"default_quota"`
+}
+
+// UpdateRegistrationConfigRequest 更新注册配置请求
+type UpdateRegistrationConfigRequest struct {
+	Enabled      *bool  `json:"enabled"`
+	DefaultQuota *int64 `json:"default_quota"`
+}
+
 // SettingResponse 设置响应
 type SettingResponse struct {
 	ID          uint      `json:"id"`

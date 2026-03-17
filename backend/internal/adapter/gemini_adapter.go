@@ -53,9 +53,15 @@ type geminiContent struct {
 }
 
 type geminiPart struct {
-	Text             string                 `json:"text,omitempty"`
-	FunctionCall     *geminiFunctionCall    `json:"functionCall,omitempty"`
+	Text             string                  `json:"text,omitempty"`
+	FunctionCall     *geminiFunctionCall     `json:"functionCall,omitempty"`
 	FunctionResponse *geminiFunctionResponse `json:"functionResponse,omitempty"`
+	InlineData       *geminiInlineData       `json:"inlineData,omitempty"` // for images
+}
+
+type geminiInlineData struct {
+	MimeType string `json:"mimeType"`
+	Data     string `json:"data"`
 }
 
 type geminiFunctionCall struct {
@@ -342,9 +348,74 @@ func (a *GeminiAdapter) convertMessages(messages []Message) ([]geminiContent, *g
 
 		parts := []geminiPart{}
 
-		// Add text content if present
-		if contentStr != "" {
-			parts = append(parts, geminiPart{Text: contentStr})
+		// Check if content is multimodal
+		switch v := msg.Content.(type) {
+		case string:
+			// Simple text content
+			if v != "" {
+				parts = append(parts, geminiPart{Text: v})
+			}
+		case []interface{}:
+			// Multimodal content
+			for _, part := range v {
+				if partMap, ok := part.(map[string]interface{}); ok {
+					partType, _ := partMap["type"].(string)
+					switch partType {
+					case "text":
+						if text, ok := partMap["text"].(string); ok {
+							parts = append(parts, geminiPart{Text: text})
+						}
+					case "image_url":
+						// OpenAI format: {"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}}
+						if imageURL, ok := partMap["image_url"].(map[string]interface{}); ok {
+							if url, ok := imageURL["url"].(string); ok {
+								mediaType, data := parseDataURL(url)
+								if mediaType != "" && data != "" {
+									parts = append(parts, geminiPart{
+										InlineData: &geminiInlineData{
+											MimeType: mediaType,
+											Data:     data,
+										},
+									})
+								}
+							}
+						}
+					case "image":
+						// Anthropic format: {"type": "image", "source": {...}}
+						if source, ok := partMap["source"].(map[string]interface{}); ok {
+							mediaType, _ := source["media_type"].(string)
+							data, _ := source["data"].(string)
+							if mediaType != "" && data != "" {
+								parts = append(parts, geminiPart{
+									InlineData: &geminiInlineData{
+										MimeType: mediaType,
+										Data:     data,
+									},
+								})
+							}
+						}
+					case "inline_data":
+						// Gemini native format
+						if inlineData, ok := partMap["inline_data"].(map[string]interface{}); ok {
+							mimeType, _ := inlineData["mime_type"].(string)
+							data, _ := inlineData["data"].(string)
+							if mimeType != "" && data != "" {
+								parts = append(parts, geminiPart{
+									InlineData: &geminiInlineData{
+										MimeType: mimeType,
+										Data:     data,
+									},
+								})
+							}
+						}
+					}
+				}
+			}
+		default:
+			// Fallback to text
+			if contentStr != "" {
+				parts = append(parts, geminiPart{Text: contentStr})
+			}
 		}
 
 		// Add tool calls if present

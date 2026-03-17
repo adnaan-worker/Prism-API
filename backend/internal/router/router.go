@@ -341,10 +341,13 @@ func (r *Router) setupAdminSettingsRoutes(group *gin.RouterGroup) {
 		// 默认配额
 		settings.GET("/default-quota", r.settingsHandler.GetDefaultQuota)
 		settings.PUT("/default-quota", r.settingsHandler.UpdateDefaultQuota)
-		
-		// 默认速率限制
+// 默认速率限制
 		settings.GET("/default-rate-limit", r.settingsHandler.GetDefaultRateLimit)
 		settings.PUT("/default-rate-limit", r.settingsHandler.UpdateDefaultRateLimit)
+
+		// 注册配置
+		settings.GET("/registration", r.settingsHandler.GetRegistrationConfig)
+		settings.PUT("/registration", r.settingsHandler.UpdateRegistrationConfig)
 	}
 }
 

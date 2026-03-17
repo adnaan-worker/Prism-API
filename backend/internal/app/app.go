@@ -185,9 +185,10 @@ func (app *App) initRouter() error {
 	accountPoolRepo := accountpool.NewRepository(app.DB)
 	settingsRepo := settings.NewRepository(app.DB)
 
-	// 初始化服务层
+// 初始化服务层
 	userService := user.NewService(userRepo, *app.Logger)
-	authService := auth.NewService(authRepo, app.Config.JWT.Secret, int64(app.Config.Registration.DefaultQuota), app.Config.Registration.Enabled, *app.Logger)
+	settingsService := settings.NewService(settingsRepo, userRepo)
+	authService := auth.NewService(authRepo, app.Config.JWT.Secret, settingsService, *app.Logger)
 	apiKeyService := apikey.NewService(apiKeyRepo, *app.Logger)
 	apiConfigService := apiconfig.NewService(apiConfigRepo, *app.Logger)
 	quotaService := quota.NewService(quotaRepo, *app.Logger)
@@ -197,8 +198,6 @@ func (app *App) initRouter() error {
 	cacheService := cache.NewService(cacheRepo, *app.Logger)
 	loadBalancerService := loadbalancer.NewService(loadBalancerRepo, apiConfigRepo)
 	accountPoolService := accountpool.NewService(accountPoolRepo)
-	settingsService := settings.NewService(settingsRepo, userRepo)
-
 	// 初始化 Adapter Factory
 	adapterFactory := adapter.NewFactory()
 

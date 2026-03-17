@@ -19,6 +19,9 @@ type Service interface {
 	UpdateDefaultQuota(ctx context.Context, req *UpdateDefaultQuotaRequest) (*DefaultQuotaResponse, error)
 	GetDefaultRateLimit(ctx context.Context) (*DefaultRateLimitResponse, error)
 	UpdateDefaultRateLimit(ctx context.Context, req *UpdateDefaultRateLimitRequest) (*DefaultRateLimitResponse, error)
+	// 注册配置
+	GetRegistrationConfig(ctx context.Context) (*RegistrationConfigResponse, error)
+	UpdateRegistrationConfig(ctx context.Context, req *UpdateRegistrationConfigRequest) (*RegistrationConfigResponse, error)
 }
 
 type service struct {
@@ -249,8 +252,47 @@ func (s *service) UpdateDefaultRateLimit(ctx context.Context, req *UpdateDefault
 			return nil, errors.Wrap(err, "failed to update default rate limit")
 		}
 	}
+return s.GetDefaultRateLimit(ctx)
+}
 
-	return s.GetDefaultRateLimit(ctx)
+// GetRegistrationConfig 获取注册配置
+func (s *service) GetRegistrationConfig(ctx context.Context) (*RegistrationConfigResponse, error) {
+	keys := []string{
+		KeyRegistrationEnabled,
+		KeyDefaultQuotaDaily,
+	}
+
+	settings, err := s.repo.GetMultiple(ctx, keys)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get registration config")
+	}
+
+	config := &RegistrationConfigResponse{
+		Enabled:      s.getBool(settings, KeyRegistrationEnabled, true),
+		DefaultQuota: s.getInt64(settings, KeyDefaultQuotaDaily, 10000),
+	}
+
+	return config, nil
+}
+
+// UpdateRegistrationConfig 更新注册配置
+func (s *service) UpdateRegistrationConfig(ctx context.Context, req *UpdateRegistrationConfigRequest) (*RegistrationConfigResponse, error) {
+	updates := make(map[string]string)
+
+	if req.Enabled != nil {
+		updates[KeyRegistrationEnabled] = strconv.FormatBool(*req.Enabled)
+	}
+	if req.DefaultQuota != nil {
+		updates[KeyDefaultQuotaDaily] = strconv.FormatInt(*req.DefaultQuota, 10)
+	}
+
+	if len(updates) > 0 {
+		if err := s.repo.SetMultiple(ctx, updates); err != nil {
+			return nil, errors.Wrap(err, "failed to update registration config")
+		}
+	}
+
+	return s.GetRegistrationConfig(ctx)
 }
 
 // 辅助方法
