@@ -67,18 +67,20 @@ const ApiConfigsPage: React.FC = () => {
   const queryClient = useQueryClient();
 
   // 获取当前池的账号列表
-  const { data: poolAccounts, refetch: refetchAccounts } = useQuery({
+  const { data: poolAccountsData, refetch: refetchAccounts } = useQuery({
     queryKey: ['pool-accounts', currentPoolId],
     queryFn: () => accountPoolService.getCredentials({ pool_id: currentPoolId! }),
     enabled: !!currentPoolId && selectedType === 'kiro',
   });
+  const poolAccounts = poolAccountsData?.credentials;
 
   // 获取管理池的账号列表
-  const { data: managingPoolAccounts, refetch: refetchManagingAccounts } = useQuery({
+  const { data: managingPoolAccountsData, refetch: refetchManagingAccounts } = useQuery({
     queryKey: ['managing-pool-accounts', managingPoolId],
     queryFn: () => accountPoolService.getCredentials({ pool_id: managingPoolId! }),
     enabled: !!managingPoolId && poolManageVisible,
   });
+  const managingPoolAccounts = managingPoolAccountsData?.credentials;
 
   // 获取管理池的详情
   const { data: managingPoolData } = useQuery({

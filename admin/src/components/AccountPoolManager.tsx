@@ -57,13 +57,18 @@ const AccountPoolManager: React.FC<AccountPoolManagerProps> = ({
   const [viewingAccount, setViewingAccount] = useState<AccountCredential | null>(null);
   const [accountForm] = Form.useForm();
   const [batchImportForm] = Form.useForm();
+  const [credPage, setCredPage] = useState(1);
+  const [credPageSize, setCredPageSize] = useState(10);
 
   // 获取账号列表
-  const { data: accounts, isLoading, refetch } = useQuery({
-    queryKey: ['pool-accounts', poolId],
-    queryFn: () => accountPoolService.getCredentials({ pool_id: poolId }),
+  const { data: accountsData, isLoading, refetch } = useQuery({
+    queryKey: ['pool-accounts', poolId, credPage, credPageSize],
+    queryFn: () => accountPoolService.getCredentials({ pool_id: poolId, page: credPage, page_size: credPageSize }),
     enabled: visible && !!poolId,
   });
+
+  const accounts = accountsData?.credentials;
+  const accountsTotal = accountsData?.total || 0;
 
   // 添加账号
   const addAccountMutation = useMutation({
@@ -489,9 +494,15 @@ const AccountPoolManager: React.FC<AccountPoolManagerProps> = ({
           loading={isLoading}
           scroll={{ x: 1000 }}
           pagination={{
-            pageSize: 10,
+            current: credPage,
+            pageSize: credPageSize,
+            total: accountsTotal,
             showSizeChanger: true,
             showTotal: (total) => `共 ${total} 个账号`,
+            onChange: (p, ps) => {
+              setCredPage(p);
+              setCredPageSize(ps);
+            },
           }}
         />
       </Modal>

@@ -38,9 +38,18 @@ export const accountPoolService = {
   },
 
   // 凭据管理
-  getCredentials: async (params?: { pool_id?: number; provider?: string; status?: string }) => {
+  getCredentials: async (params?: {
+    pool_id?: number;
+    provider?: string;
+    status?: string;
+    page?: number;
+    page_size?: number;
+  }) => {
     const { data } = await api.get<CredentialListResponse>('/admin/account-pools/credentials', { params });
-    return data.credentials || [];
+    return {
+      credentials: data.credentials || [],
+      total: data.total || 0,
+    };
   },
 
   getCredential: async (id: number) => {
