@@ -283,6 +283,18 @@ func ToCredentialResponse(cred *AccountCredential) *CredentialResponse {
 	accountName, _ := cred.Metadata["account_name"].(string)
 	accountEmail, _ := cred.Metadata["account_email"].(string)
 	machineID, _ := cred.Metadata["machine_id"].(string)
+	status, _ := cred.Metadata["status"].(string)
+	if status == "" {
+		if banned, ok := cred.Metadata["banned"].(bool); ok && banned {
+			status = "banned"
+		} else if cred.IsExpired() {
+			status = "expired"
+		} else if cred.HealthStatus == HealthStatusUnhealthy {
+			status = "error"
+		} else {
+			status = "active"
+		}
+	}
 
 	// 提取订阅信息
 	var subscriptionType, subscriptionTitle string
@@ -291,14 +303,9 @@ func ToCredentialResponse(cred *AccountCredential) *CredentialResponse {
 	if sub, ok := cred.Metadata["subscription"].(map[string]interface{}); ok {
 		subscriptionType, _ = sub["type"].(string)
 		subscriptionTitle, _ = sub["title"].(string)
-		if expiresStr, ok := sub["expires_at"].(string); ok && expiresStr != "" {
-			if t, err := time.Parse(time.RFC3339, expiresStr); err == nil {
-				subscriptionExpiresAt = &t
-			}
-		}
-		if days, ok := sub["days_remaining"].(float64); ok {
-			d := int(days)
-			subscriptionDaysRemaining = &d
+		subscriptionExpiresAt = parseMetadataTime(sub["expires_at"])
+		if days := parseMetadataInt(sub["days_remaining"]); days != nil {
+			subscriptionDaysRemaining = days
 		}
 	}
 
@@ -307,42 +314,30 @@ func ToCredentialResponse(cred *AccountCredential) *CredentialResponse {
 	var usagePercent float64
 	var usageLastUpdated, freeTrialExpiry, nextResetDate *time.Time
 	if usage, ok := cred.Metadata["usage"].(map[string]interface{}); ok {
-		if current, ok := usage["current"].(float64); ok {
-			usageCurrent = int(current)
+		if current := parseMetadataInt(usage["current"]); current != nil {
+			usageCurrent = *current
 		}
-		if limit, ok := usage["limit"].(float64); ok {
-			usageLimit = int(limit)
+		if limit := parseMetadataInt(usage["limit"]); limit != nil {
+			usageLimit = *limit
 		}
 		if percent, ok := usage["percent"].(float64); ok {
 			usagePercent = percent
 		}
-		if lastUpdatedStr, ok := usage["last_updated"].(string); ok && lastUpdatedStr != "" {
-			if t, err := time.Parse(time.RFC3339, lastUpdatedStr); err == nil {
-				usageLastUpdated = &t
-			}
+		usageLastUpdated = parseMetadataTime(usage["last_updated"])
+		if value := parseMetadataInt(usage["base_limit"]); value != nil {
+			baseLimit = *value
 		}
-		if bl, ok := usage["base_limit"].(float64); ok {
-			baseLimit = int(bl)
+		if value := parseMetadataInt(usage["base_current"]); value != nil {
+			baseCurrent = *value
 		}
-		if bc, ok := usage["base_current"].(float64); ok {
-			baseCurrent = int(bc)
+		if value := parseMetadataInt(usage["free_trial_limit"]); value != nil {
+			freeTrialLimit = *value
 		}
-		if ftl, ok := usage["free_trial_limit"].(float64); ok {
-			freeTrialLimit = int(ftl)
+		if value := parseMetadataInt(usage["free_trial_current"]); value != nil {
+			freeTrialCurrent = *value
 		}
-		if ftc, ok := usage["free_trial_current"].(float64); ok {
-			freeTrialCurrent = int(ftc)
-		}
-		if fteStr, ok := usage["free_trial_expiry"].(string); ok && fteStr != "" {
-			if t, err := time.Parse(time.RFC3339, fteStr); err == nil {
-				freeTrialExpiry = &t
-			}
-		}
-		if nrdStr, ok := usage["next_reset_date"].(string); ok && nrdStr != "" {
-			if t, err := time.Parse(time.RFC3339, nrdStr); err == nil {
-				nextResetDate = &t
-			}
-		}
+		freeTrialExpiry = parseMetadataTime(usage["free_trial_expiry"])
+		nextResetDate = parseMetadataTime(usage["next_reset_date"])
 	}
 
 	return &CredentialResponse{
@@ -356,7 +351,7 @@ func ToCredentialResponse(cred *AccountCredential) *CredentialResponse {
 		AccountEmail:  accountEmail,
 		Weight:        cred.Weight,
 		IsActive:      cred.IsActive,
-		Status:        "active", // 简化状态
+		Status:        status,
 		LastError:     cred.LastError,
 		HealthStatus:  cred.HealthStatus,
 		LastCheckedAt: nil, // 不再单独记录
@@ -403,4 +398,43 @@ func ToCredentialListResponse(creds []*AccountCredential, total int64) *Credenti
 		Credentials: responses,
 		Total:       total,
 	}
+}
+
+func parseMetadataTime(value interface{}) *time.Time {
+	switch v := value.(type) {
+	case string:
+		if v == "" {
+			return nil
+		}
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			return &t
+		}
+	case time.Time:
+		t := v
+		return &t
+	case *time.Time:
+		return v
+	}
+	return nil
+}
+
+func parseMetadataInt(value interface{}) *int {
+	switch v := value.(type) {
+	case int:
+		result := v
+		return &result
+	case int32:
+		result := int(v)
+		return &result
+	case int64:
+		result := int(v)
+		return &result
+	case float32:
+		result := int(v)
+		return &result
+	case float64:
+		result := int(v)
+		return &result
+	}
+	return nil
 }

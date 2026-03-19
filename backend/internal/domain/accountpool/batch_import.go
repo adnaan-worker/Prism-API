@@ -123,22 +123,32 @@ func (s *service) BatchImport(ctx context.Context, poolID uint, accounts []KiroA
 			"account_email": acc.Email,
 		}
 		
+		metadata["region"] = acc.Credentials.Region
+		metadata["status"] = acc.Status
+		metadata["banned"] = acc.Status == "banned"
+
 		// 添加订阅信息
 		if acc.Subscription.Type != "" {
-			metadata["subscription"] = map[string]interface{}{
-				"type":            acc.Subscription.Type,
-				"title":           acc.Subscription.Title,
-				"expires_at":      subscriptionExpiresAt,
-				"days_remaining":  daysRemaining,
+			subscription := map[string]interface{}{
+				"type":  acc.Subscription.Type,
+				"title": acc.Subscription.Title,
 			}
+			if subscriptionExpiresAt != nil {
+				subscription["expires_at"] = subscriptionExpiresAt.Format(time.RFC3339)
+			}
+			if daysRemaining != nil {
+				subscription["days_remaining"] = *daysRemaining
+			}
+			metadata["subscription"] = subscription
 		}
 		
 		// 添加使用量信息
 		if acc.Usage.Limit > 0 {
 			metadata["usage"] = map[string]interface{}{
-				"current": acc.Usage.Current,
-				"limit":   acc.Usage.Limit,
-				"percent": usagePercent,
+				"current":      acc.Usage.Current,
+				"limit":        acc.Usage.Limit,
+				"percent":      usagePercent,
+				"last_updated": time.Now().Format(time.RFC3339),
 			}
 		}
 
@@ -157,12 +167,8 @@ func (s *service) BatchImport(ctx context.Context, poolID uint, accounts []KiroA
 			RateLimit:    defaultRateLimit,
 		}
 		
-		// 设置使用量最后更新时间到 Metadata
 		if cred.Metadata == nil {
 			cred.Metadata = make(JSONMap)
-		}
-		if usage, ok := cred.Metadata["usage"].(map[string]interface{}); ok {
-			usage["last_updated"] = time.Now()
 		}
 
 		// 尝试创建凭据

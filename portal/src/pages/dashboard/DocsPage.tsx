@@ -1,16 +1,13 @@
 import { useState } from 'react';
-import { Typography, Button, Space, message, Divider, Tag, Alert, Card, Menu } from 'antd';
+import { Button, message, Tag, Alert } from 'antd';
 import {
   CopyOutlined,
-  DownloadOutlined,
   CheckOutlined,
   ApiOutlined,
   CodeOutlined,
   RocketOutlined,
   SafetyOutlined,
 } from '@ant-design/icons';
-
-const { Title, Paragraph, Text } = Typography;
 
 interface CodeBlockProps {
   code: string;
@@ -56,6 +53,8 @@ const CodeBlock = ({ code, language }: CodeBlockProps) => {
 
 const DocsPage = () => {
   const [selectedKey, setSelectedKey] = useState('quick-start');
+  const apiBaseUrl = `${window.location.origin}/v1`;
+  const chatCompletionsUrl = `${apiBaseUrl}/chat/completions`;
 
   const menuItems = [
     { key: 'quick-start', icon: <RocketOutlined />, label: '快速开始' },
@@ -91,7 +90,7 @@ const DocsPage = () => {
               <p className="text-text-secondary mb-4">使用curl命令快速测试：</p>
               <CodeBlock
                 language="bash"
-                code={`curl http://localhost:8080/v1/chat/completions \\
+                code={`curl ${chatCompletionsUrl} \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -d '{
@@ -161,7 +160,7 @@ Content-Type: application/json`}
 
             <div className="glass-card p-6 rounded-2xl">
               <h3 className="text-xl font-bold text-text-primary mb-3">端点</h3>
-              <CodeBlock language="text" code="POST http://localhost:8080/v1/chat/completions" />
+              <CodeBlock language="text" code={`POST ${chatCompletionsUrl}`} />
             </div>
 
             <div className="glass-card p-6 rounded-2xl">
@@ -170,7 +169,7 @@ Content-Type: application/json`}
 
 client = OpenAI(
     api_key="YOUR_API_KEY",
-    base_url="http://localhost:8080/v1"
+    base_url="${apiBaseUrl}"
 )
 
 response = client.chat.completions.create(
