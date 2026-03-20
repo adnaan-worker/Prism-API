@@ -4,8 +4,86 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 )
+
+// FlexibleImportTime 兼容 RFC3339 字符串、Unix 秒/毫秒时间戳的导入时间字段
+type FlexibleImportTime struct {
+	time.Time
+	Valid bool
+}
+
+func (t *FlexibleImportTime) UnmarshalJSON(data []byte) error {
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" || trimmed == "null" {
+		t.Time = time.Time{}
+		t.Valid = false
+		return nil
+	}
+
+	var raw interface{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	parsed, ok := parseFlexibleImportTime(raw)
+	if !ok {
+		return fmt.Errorf("invalid time value: %s", trimmed)
+	}
+
+	t.Time = parsed
+	t.Valid = true
+	return nil
+}
+
+func (t FlexibleImportTime) Ptr() *time.Time {
+	if !t.Valid {
+		return nil
+	}
+	tm := t.Time
+	return &tm
+}
+
+func parseFlexibleImportTime(value interface{}) (time.Time, bool) {
+	switch v := value.(type) {
+	case string:
+		v = strings.TrimSpace(v)
+		if v == "" {
+			return time.Time{}, false
+		}
+		if ts, err := time.Parse(time.RFC3339, v); err == nil {
+			return ts, true
+		}
+		if num, err := strconv.ParseInt(v, 10, 64); err == nil {
+			return unixAuto(num), true
+		}
+	case float64:
+		if v <= 0 {
+			return time.Time{}, false
+		}
+		return unixAuto(int64(v)), true
+	case int64:
+		if v <= 0 {
+			return time.Time{}, false
+		}
+		return unixAuto(v), true
+	case int:
+		if v <= 0 {
+			return time.Time{}, false
+		}
+		return unixAuto(int64(v)), true
+	}
+	return time.Time{}, false
+}
+
+func unixAuto(v int64) time.Time {
+	if v > 1e12 {
+		return time.UnixMilli(v)
+	}
+	return time.Unix(v, 0)
+}
 
 // KiroAccountImport Kiro 账号导入格式（从 Kiro Account Manager 导出）
 type KiroAccountImport struct {
@@ -14,28 +92,38 @@ type KiroAccountImport struct {
 	Nickname string `json:"nickname"`
 	IDP      string `json:"idp"`
 	Credentials struct {
-		AccessToken  string `json:"accessToken"`
-		CSRFToken    string `json:"csrfToken"`
-		RefreshToken string `json:"refreshToken"`
-		ClientID     string `json:"clientId"`
-		ClientSecret string `json:"clientSecret"`
-		Region       string `json:"region"`
-		ExpiresAt    int64  `json:"expiresAt"`
-		AuthMethod   string `json:"authMethod"`
-		Provider     string `json:"provider"`
+		AccessToken  string             `json:"accessToken"`
+		CSRFToken    string             `json:"csrfToken"`
+		RefreshToken string             `json:"refreshToken"`
+		ClientID     string             `json:"clientId"`
+		ClientSecret string             `json:"clientSecret"`
+		Region       string             `json:"region"`
+		ExpiresAt    FlexibleImportTime `json:"expiresAt"`
+		AuthMethod   string             `json:"authMethod"`
+		Provider     string             `json:"provider"`
 	} `json:"credentials"`
 	Subscription struct {
-		Type       string `json:"type"`
-		Title      string `json:"title"`
-		ExpiresAt  int64  `json:"expiresAt,omitempty"`
+		Type      string             `json:"type"`
+		Title     string             `json:"title"`
+		ExpiresAt FlexibleImportTime `json:"expiresAt,omitempty"`
 	} `json:"subscription"`
 	Usage struct {
-		Current      float64 `json:"current"`
-		Limit        float64 `json:"limit"`
-		PercentUsed  float64 `json:"percentUsed"`
+		Current     float64 `json:"current"`
+		Limit       float64 `json:"limit"`
+		PercentUsed float64 `json:"percentUsed"`
 	} `json:"usage"`
 	Status string `json:"status"`
 	ID     string `json:"id"`
+}
+
+func normalizeUsagePercentValue(percent float64) float64 {
+	if percent <= 0 {
+		return 0
+	}
+	if percent <= 1 {
+		return percent * 100
+	}
+	return percent
 }
 
 // BatchImportRequest 批量导入请求
@@ -88,32 +176,30 @@ func (s *service) BatchImport(ctx context.Context, poolID uint, accounts []KiroA
 	}
 
 	// 逐个导入账号
+	now := time.Now()
 	for i, acc := range accounts {
 		// 计算到期天数
 		var daysRemaining *int
-		if acc.Subscription.ExpiresAt > 0 {
-			days := int((acc.Subscription.ExpiresAt - time.Now().UnixMilli()) / (24 * 60 * 60 * 1000))
+		subscriptionExpiresAt := acc.Subscription.ExpiresAt.Ptr()
+		if subscriptionExpiresAt != nil {
+			days := int(subscriptionExpiresAt.Sub(now).Hours() / 24)
+			if subscriptionExpiresAt.After(now) && subscriptionExpiresAt.Sub(now).Hours()/24 > float64(days) {
+				days++
+			}
+			if days < 0 {
+				days = 0
+			}
 			daysRemaining = &days
 		}
 
 		// 计算使用百分比
-		usagePercent := 0.0
-		if acc.Usage.Limit > 0 {
+		usagePercent := normalizeUsagePercentValue(acc.Usage.PercentUsed)
+		if usagePercent == 0 && acc.Usage.Limit > 0 {
 			usagePercent = float64(acc.Usage.Current) / float64(acc.Usage.Limit) * 100
 		}
 
 		// 转换过期时间
-		var subscriptionExpiresAt *time.Time
-		if acc.Subscription.ExpiresAt > 0 {
-			t := time.UnixMilli(acc.Subscription.ExpiresAt)
-			subscriptionExpiresAt = &t
-		}
-
-		var expiresAt *time.Time
-		if acc.Credentials.ExpiresAt > 0 {
-			t := time.UnixMilli(acc.Credentials.ExpiresAt)
-			expiresAt = &t
-		}
+		expiresAt := acc.Credentials.ExpiresAt.Ptr()
 
 		// 构建 Metadata
 		metadata := JSONMap{

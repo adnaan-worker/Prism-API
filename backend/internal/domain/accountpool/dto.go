@@ -1,6 +1,10 @@
 package accountpool
 
-import "time"
+import (
+	"strconv"
+	"strings"
+	"time"
+)
 
 // CreatePoolRequest 创建账号池请求
 type CreatePoolRequest struct {
@@ -320,8 +324,8 @@ func ToCredentialResponse(cred *AccountCredential) *CredentialResponse {
 		if limit := parseMetadataInt(usage["limit"]); limit != nil {
 			usageLimit = *limit
 		}
-		if percent, ok := usage["percent"].(float64); ok {
-			usagePercent = percent
+		if percent := parseMetadataFloat(usage["percent"]); percent != nil {
+			usagePercent = normalizeUsagePercentOutput(*percent)
 		}
 		usageLastUpdated = parseMetadataTime(usage["last_updated"])
 		if value := parseMetadataInt(usage["base_limit"]); value != nil {
@@ -403,17 +407,27 @@ func ToCredentialListResponse(creds []*AccountCredential, total int64) *Credenti
 func parseMetadataTime(value interface{}) *time.Time {
 	switch v := value.(type) {
 	case string:
+		v = strings.TrimSpace(v)
 		if v == "" {
 			return nil
 		}
 		if t, err := time.Parse(time.RFC3339, v); err == nil {
 			return &t
 		}
+		if num, err := strconv.ParseInt(v, 10, 64); err == nil {
+			return unixTimeAuto(num)
+		}
 	case time.Time:
 		t := v
 		return &t
 	case *time.Time:
 		return v
+	case float64:
+		return unixTimeAuto(int64(v))
+	case int64:
+		return unixTimeAuto(v)
+	case int:
+		return unixTimeAuto(int64(v))
 	}
 	return nil
 }
@@ -435,6 +449,66 @@ func parseMetadataInt(value interface{}) *int {
 	case float64:
 		result := int(v)
 		return &result
+	case string:
+		v = strings.TrimSpace(v)
+		if v == "" {
+			return nil
+		}
+		if parsed, err := strconv.Atoi(v); err == nil {
+			return &parsed
+		}
 	}
 	return nil
+}
+
+func parseMetadataFloat(value interface{}) *float64 {
+	switch v := value.(type) {
+	case float64:
+		result := v
+		return &result
+	case float32:
+		result := float64(v)
+		return &result
+	case int:
+		result := float64(v)
+		return &result
+	case int32:
+		result := float64(v)
+		return &result
+	case int64:
+		result := float64(v)
+		return &result
+	case string:
+		v = strings.TrimSpace(v)
+		if v == "" {
+			return nil
+		}
+		if parsed, err := strconv.ParseFloat(v, 64); err == nil {
+			return &parsed
+		}
+	}
+	return nil
+}
+
+func normalizeUsagePercentOutput(percent float64) float64 {
+	if percent <= 0 {
+		return 0
+	}
+	if percent <= 1 {
+		return percent * 100
+	}
+	return percent
+}
+
+func unixTimeAuto(value int64) *time.Time {
+	if value <= 0 {
+		return nil
+	}
+	var t time.Time
+	if value > 1e12 {
+		t = time.UnixMilli(value)
+	} else {
+		t = time.Unix(value, 0)
+	}
+	return &t
 }

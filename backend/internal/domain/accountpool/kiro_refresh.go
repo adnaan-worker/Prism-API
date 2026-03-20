@@ -426,30 +426,22 @@ func normalizeSubscriptionType(values ...string) string {
 func parseFlexibleTime(value interface{}) *time.Time {
 	switch v := value.(type) {
 	case string:
+		v = strings.TrimSpace(v)
 		if v == "" {
 			return nil
 		}
 		if t, err := time.Parse(time.RFC3339, v); err == nil {
 			return &t
 		}
+		if parsed, err := strconv.ParseInt(v, 10, 64); err == nil {
+			return unixTimeAuto(parsed)
+		}
 	case float64:
-		if v <= 0 {
-			return nil
-		}
-		t := time.Unix(int64(v), 0)
-		return &t
+		return unixTimeAuto(int64(v))
 	case int64:
-		if v <= 0 {
-			return nil
-		}
-		t := time.Unix(v, 0)
-		return &t
+		return unixTimeAuto(v)
 	case int:
-		if v <= 0 {
-			return nil
-		}
-		t := time.Unix(int64(v), 0)
-		return &t
+		return unixTimeAuto(int64(v))
 	}
 	return nil
 }
